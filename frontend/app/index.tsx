@@ -590,18 +590,22 @@ const styles = StyleSheet.create({
   },
   brandContainer: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
+    gap: 10,
+  },
+  brandTextContainer: {
+    flexDirection: 'column',
   },
   brandName: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#FFFFFF',
     letterSpacing: -0.5,
   },
   brandLocation: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginLeft: 8,
+    fontSize: 11,
+    color: '#8FAFC4',
+    marginTop: -2,
   },
   adminButton: {
     padding: 8,
