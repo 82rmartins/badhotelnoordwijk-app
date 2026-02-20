@@ -427,6 +427,12 @@ export const translations: Record<Language, Translations> = {
     nextDaysBelowTarget: 'Komende dagen ook onder doel.',
     todayOnTarget: 'Vandaag op doel.',
     requiresAttention: 'Vereist directe aandacht.',
+    noCriticalIssues: 'Geen kritieke problemen geïdentificeerd op dit moment.',
+    
+    // Status reasons
+    todayOccupancyBelow: 'Reden: bezetting vandaag ({0}%) onder doel',
+    d7BelowTarget: 'Reden: D+7 ({0}%) onder doel',
+    d14BelowTarget: 'Reden: D+14 ({0}%) onder doel',
   },
 };
 
