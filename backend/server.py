@@ -155,28 +155,76 @@ def calculate_rhythm(current_week_revenue: float, previous_week_revenue: float) 
         return "down"
     return "stable"
 
-def generate_alerts(today_stats: dict, radar_stats: list, settings: dict) -> List[str]:
-    """Generate attention alerts (max 3)"""
+def calculate_trend(current_week_stats: list, previous_week_stats: list) -> str:
+    """
+    Calculate trend based on 7-day vs previous 7-day occupancy comparison.
+    Returns: 'improving', 'stable', 'worsening'
+    """
+    if not previous_week_stats:
+        return "stable"
+    
+    current_avg = sum(s.get('occupancy_percent', 0) for s in current_week_stats) / max(len(current_week_stats), 1)
+    previous_avg = sum(s.get('occupancy_percent', 0) for s in previous_week_stats) / max(len(previous_week_stats), 1)
+    
+    if previous_avg == 0:
+        return "stable"
+    
+    change = (current_avg - previous_avg) / previous_avg
+    
+    if change > 0.05:
+        return "improving"
+    elif change < -0.05:
+        return "worsening"
+    return "stable"
+
+def generate_enhanced_alerts(today_stats: dict, radar_stats: list, settings: dict) -> List[Dict[str, Any]]:
+    """
+    Generate enhanced alerts with context (max 3).
+    Each alert includes: message, today_status, future_status
+    """
     alerts = []
     today = datetime.utcnow()
     
-    # Check today's occupancy
     today_occ = today_stats.get('occupancy_percent', 0)
     today_target = get_season_target(today, settings)
+    today_below = today_occ < today_target * 0.8
     
-    if today_occ < today_target * 0.7:
-        alerts.append(f"Ocupação hoje ({today_occ:.0f}%) abaixo da meta ({today_target:.0f}%)")
+    # Calculate future outlook (next 7 days average)
+    future_avg = sum(s.get('occupancy_percent', 0) for s in radar_stats[1:8]) / 7 if len(radar_stats) > 1 else 0
+    future_target = sum(get_season_target(s.get('date', today), settings) for s in radar_stats[1:8]) / 7 if len(radar_stats) > 1 else today_target
+    future_ok = future_avg >= future_target * 0.8
     
-    # Check next 7 days for low occupancy in high season
+    # Check today's occupancy
+    if today_below:
+        context = ""
+        if future_ok:
+            context = "Próximos dias dentro do ritmo esperado."
+        else:
+            context = "Próximos dias também abaixo da meta."
+        
+        alerts.append({
+            "message": f"Ocupação hoje ({today_occ:.0f}%) abaixo da meta ({today_target:.0f}%)",
+            "today_status": "critical",
+            "future_status": "ok" if future_ok else "critical",
+            "context": context
+        })
+    
+    # Check next 7 days for low occupancy
     low_days = []
-    for stat in radar_stats[:7]:
+    for stat in radar_stats[1:8]:
         occ = stat.get('occupancy_percent', 0)
         target = get_season_target(stat.get('date', today), settings)
-        if occ < target * 0.6 and is_high_season(stat.get('date', today)):
-            low_days.append(stat.get('date', today))
+        if occ < target * 0.7:
+            low_days.append(stat)
     
-    if len(low_days) >= 2:
-        alerts.append(f"{len(low_days)} dias críticos nos próximos 7 dias")
+    if len(low_days) >= 2 and len(alerts) < 3:
+        today_context = "Hoje dentro da meta." if not today_below else ""
+        alerts.append({
+            "message": f"{len(low_days)} dias críticos nos próximos 7 dias",
+            "today_status": "ok" if not today_below else "critical",
+            "future_status": "critical",
+            "context": today_context
+        })
     
     # Check for consecutive weak days
     consecutive_weak = 0
@@ -186,10 +234,24 @@ def generate_alerts(today_stats: dict, radar_stats: list, settings: dict) -> Lis
         else:
             break
     
-    if consecutive_weak >= 3:
-        alerts.append(f"{consecutive_weak} dias consecutivos com ocupação baixa")
+    if consecutive_weak >= 3 and len(alerts) < 3:
+        alerts.append({
+            "message": f"{consecutive_weak} dias consecutivos com ocupação baixa",
+            "today_status": "critical" if today_below else "warning",
+            "future_status": "critical",
+            "context": "Requer atenção imediata."
+        })
     
-    return alerts[:3]  # Max 3 alerts
+    # If no alerts, return positive message
+    if not alerts:
+        alerts.append({
+            "message": "Nenhum ponto crítico identificado no momento.",
+            "today_status": "ok",
+            "future_status": "ok",
+            "context": ""
+        })
+    
+    return alerts[:3]
 
 # ============== API ROUTES ==============
 
