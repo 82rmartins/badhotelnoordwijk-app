@@ -424,24 +424,25 @@ export default function Dashboard() {
       
       // Generate day stats for swipeable cards (2 days before, today, 2 days after)
       const today = new Date();
+      today.setHours(0, 0, 0, 0);
       const dayStats: DailyStats[] = [];
       for (let i = -2; i <= 2; i++) {
         const date = new Date(today);
         date.setDate(today.getDate() + i);
-        dayStats.push(calculateDailyStats(date, loadedReservations, loadedSettings));
+        const stats = calculateDailyStats(date, loadedReservations, loadedSettings);
+        dayStats.push(stats);
       }
       setDayStatsArray(dayStats);
       
-      // Generate weekly chart data
-      const dayOfWeek = today.getDay();
-      const monday = new Date(today);
-      monday.setDate(today.getDate() - ((dayOfWeek + 6) % 7));
+      // Generate weekly chart data from radar
       const weekStats = [];
-      for (let i = 0; i < 7; i++) {
-        const date = new Date(monday);
-        date.setDate(monday.getDate() + i);
-        const radar = dashboardData.radar.find(r => new Date(r.date).toDateString() === date.toDateString());
-        weekStats.push({ date, occupancy_percent: radar?.occupancy_percent || 0 });
+      // Get first 7 days from radar for the week
+      for (let i = 0; i < 7 && i < dashboardData.radar.length; i++) {
+        const radarDay = dashboardData.radar[i];
+        weekStats.push({ 
+          date: new Date(radarDay.date), 
+          occupancy_percent: radarDay.occupancy_percent || 0 
+        });
       }
       setWeekChartData(weekStats);
       
