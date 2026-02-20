@@ -323,8 +323,11 @@ export default function Dashboard() {
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <View style={styles.brandContainer}>
-            <Text style={styles.brandName}>Bad Hotel</Text>
-            <Text style={styles.brandLocation}>Noordwijk</Text>
+            <HotelLogo size={36} />
+            <View style={styles.brandTextContainer}>
+              <Text style={styles.brandName}>BadHotel</Text>
+              <Text style={styles.brandLocation}>Noordwijk</Text>
+            </View>
           </View>
           <TouchableOpacity
             style={styles.adminButton}
