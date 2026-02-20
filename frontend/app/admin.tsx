@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,19 +14,54 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+import { 
+  saveReservations, 
+  loadReservations, 
+  saveSettings, 
+  loadSettings, 
+  getLastUpdate,
+  clearAllData,
+  HotelSettings,
+  DEFAULT_SETTINGS 
+} from '../utils/storage';
+import { parseCSV } from '../utils/csvParser';
+import { generateDemoReservations } from '../utils/calculations';
 
 export default function AdminScreen() {
   const [uploading, setUploading] = useState(false);
   const [seedingData, setSeedingData] = useState(false);
   const [lastResult, setLastResult] = useState<string | null>(null);
+  const [settings, setSettings] = useState<HotelSettings>(DEFAULT_SETTINGS);
+  const [lastUpdate, setLastUpdate] = useState<string | null>(null);
+  const [reservationCount, setReservationCount] = useState(0);
   const router = useRouter();
+
+  // Load current data on mount
+  useEffect(() => {
+    loadCurrentData();
+  }, []);
+
+  const loadCurrentData = async () => {
+    try {
+      const [loadedSettings, update, reservations] = await Promise.all([
+        loadSettings(),
+        getLastUpdate(),
+        loadReservations(),
+      ]);
+      setSettings(loadedSettings);
+      setLastUpdate(update);
+      setReservationCount(reservations.length);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    }
+  };
 
   const pickAndUploadCSV = useCallback(async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['text/csv', 'text/comma-separated-values', 'application/csv'],
+        type: ['text/csv', 'text/comma-separated-values', 'application/csv', '*/*'],
         copyToCacheDirectory: true,
       });
 
@@ -38,30 +73,37 @@ export default function AdminScreen() {
       setUploading(true);
       setLastResult(null);
 
-      // Create form data
-      const formData = new FormData();
-      formData.append('file', {
-        uri: file.uri,
-        name: file.name || 'reservations.csv',
-        type: 'text/csv',
-      } as any);
+      // Read file content
+      let content: string;
+      try {
+        content = await FileSystem.readAsStringAsync(file.uri);
+      } catch (readError) {
+        throw new Error('Não foi possível ler o arquivo. Verifique se é um CSV válido.');
+      }
 
-      const response = await fetch(`${BACKEND_URL}/api/upload/reservations`, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      // Parse CSV
+      const { reservations, errors } = parseCSV(content);
 
-      const data = await response.json();
+      if (reservations.length === 0) {
+        throw new Error('Nenhuma reserva válida encontrada no arquivo.');
+      }
 
-      if (response.ok) {
-        setLastResult(`✓ ${data.message}`);
-        Alert.alert('Sucesso', data.message);
+      // Save to local storage
+      await saveReservations(reservations);
+
+      // Update state
+      await loadCurrentData();
+
+      const message = `✓ Processado: ${reservations.length} reservas importadas`;
+      setLastResult(message);
+      
+      if (errors.length > 0) {
+        Alert.alert(
+          'Importação Concluída',
+          `${reservations.length} reservas importadas.\n\nAvisos:\n${errors.slice(0, 3).join('\n')}${errors.length > 3 ? `\n...e mais ${errors.length - 3}` : ''}`
+        );
       } else {
-        setLastResult(`✗ Erro: ${data.detail || 'Falha no upload'}`);
-        Alert.alert('Erro', data.detail || 'Falha no upload');
+        Alert.alert('Sucesso', message);
       }
     } catch (error: any) {
       console.error('Upload error:', error);
@@ -77,19 +119,18 @@ export default function AdminScreen() {
       setSeedingData(true);
       setLastResult(null);
 
-      const response = await fetch(`${BACKEND_URL}/api/seed-demo-data`, {
-        method: 'POST',
-      });
+      // Generate demo reservations
+      const demoReservations = generateDemoReservations(settings);
 
-      const data = await response.json();
+      // Save to local storage
+      await saveReservations(demoReservations);
 
-      if (response.ok) {
-        setLastResult(`✓ ${data.message}`);
-        Alert.alert('Sucesso', data.message);
-      } else {
-        setLastResult(`✗ Erro: ${data.detail || 'Falha ao criar dados'}`);
-        Alert.alert('Erro', data.detail || 'Falha ao criar dados');
-      }
+      // Update state
+      await loadCurrentData();
+
+      const message = `✓ ${demoReservations.length} reservas de demonstração criadas`;
+      setLastResult(message);
+      Alert.alert('Sucesso', message);
     } catch (error: any) {
       console.error('Seed error:', error);
       setLastResult(`✗ Erro: ${error.message}`);
@@ -97,7 +138,38 @@ export default function AdminScreen() {
     } finally {
       setSeedingData(false);
     }
+  }, [settings]);
+
+  const handleClearData = useCallback(async () => {
+    Alert.alert(
+      'Limpar Dados',
+      'Tem certeza que deseja apagar todos os dados? Esta ação não pode ser desfeita.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Apagar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await clearAllData();
+              await loadCurrentData();
+              setLastResult('✓ Dados apagados com sucesso');
+              Alert.alert('Sucesso', 'Todos os dados foram apagados.');
+            } catch (error: any) {
+              Alert.alert('Erro', error.message);
+            }
+          },
+        },
+      ]
+    );
   }, []);
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'Nunca';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' +
+           date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -116,11 +188,35 @@ export default function AdminScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        {/* Status Card */}
+        <View style={styles.statusCard}>
+          <View style={styles.statusRow}>
+            <Ionicons name="server-outline" size={20} color="#10B981" />
+            <Text style={styles.statusLabel}>Dados Locais</Text>
+          </View>
+          <View style={styles.statusDetails}>
+            <View style={styles.statusItem}>
+              <Text style={styles.statusValue}>{reservationCount}</Text>
+              <Text style={styles.statusItemLabel}>Reservas</Text>
+            </View>
+            <View style={styles.statusDivider} />
+            <View style={styles.statusItem}>
+              <Text style={styles.statusValue}>{settings.total_rooms}</Text>
+              <Text style={styles.statusItemLabel}>Quartos</Text>
+            </View>
+            <View style={styles.statusDivider} />
+            <View style={styles.statusItem}>
+              <Text style={styles.statusValue}>{formatDate(lastUpdate).split(' ')[0]}</Text>
+              <Text style={styles.statusItemLabel}>Atualização</Text>
+            </View>
+          </View>
+        </View>
+
         {/* Info Card */}
         <View style={styles.infoCard}>
           <Ionicons name="information-circle" size={20} color="#60A5FA" />
           <Text style={styles.infoText}>
-            Faça upload do arquivo CSV exportado do Mews PMS para atualizar os dados do painel.
+            Faça upload do arquivo CSV exportado do Mews PMS para atualizar os dados. Todos os cálculos são feitos localmente no dispositivo.
           </Text>
         </View>
 
@@ -215,30 +311,38 @@ export default function AdminScreen() {
           <View style={styles.settingsCard}>
             <View style={styles.settingRow}>
               <Text style={styles.settingLabel}>Total de quartos</Text>
-              <Text style={styles.settingValue}>24</Text>
+              <Text style={styles.settingValue}>{settings.total_rooms}</Text>
             </View>
             <View style={styles.settingDivider} />
             <View style={styles.settingRow}>
               <Text style={styles.settingLabel}>Meta alta temporada (Abr-Set)</Text>
-              <Text style={styles.settingValue}>85%</Text>
+              <Text style={styles.settingValue}>{settings.high_season_target}%</Text>
             </View>
             <View style={styles.settingDivider} />
             <View style={styles.settingRow}>
               <Text style={styles.settingLabel}>Meta baixa temporada (Out-Mar)</Text>
-              <Text style={styles.settingValue}>65%</Text>
+              <Text style={styles.settingValue}>{settings.low_season_target}%</Text>
             </View>
           </View>
         </View>
 
-        {/* API Info */}
+        {/* Clear Data Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Integração API</Text>
-          <Text style={styles.sectionSubtitle}>Preparado para automação futura</Text>
+          <TouchableOpacity
+            style={styles.dangerButton}
+            onPress={handleClearData}
+          >
+            <Ionicons name="trash-outline" size={20} color="#EF4444" />
+            <Text style={styles.dangerButtonText}>Limpar Todos os Dados</Text>
+          </TouchableOpacity>
+        </View>
 
-          <View style={styles.apiCard}>
-            <Ionicons name="code-slash" size={20} color="#6B7280" />
-            <Text style={styles.apiText}>
-              A arquitetura está preparada para integração direta com a API do Mews PMS. Atualmente operando em modo CSV.
+        {/* Architecture Info */}
+        <View style={styles.section}>
+          <View style={styles.archCard}>
+            <Ionicons name="phone-portrait-outline" size={20} color="#6B7280" />
+            <Text style={styles.archText}>
+              V1 — Processamento 100% local. Dados armazenados no dispositivo. Funciona offline.
             </Text>
           </View>
         </View>
@@ -281,6 +385,48 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+  },
+  statusCard: {
+    backgroundColor: '#10B98115',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#10B98130',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  statusLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#10B981',
+  },
+  statusDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  statusItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statusValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  statusItemLabel: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  statusDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: '#10B98130',
   },
   infoCard: {
     flexDirection: 'row',
@@ -424,7 +570,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  apiCard: {
+  dangerButton: {
+    flexDirection: 'row',
+    backgroundColor: '#EF444415',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#EF444430',
+  },
+  dangerButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#EF4444',
+  },
+  archCard: {
     flexDirection: 'row',
     backgroundColor: '#111113',
     borderRadius: 12,
@@ -434,11 +597,11 @@ const styles = StyleSheet.create({
     gap: 12,
     alignItems: 'flex-start',
   },
-  apiText: {
+  archText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 12,
     color: '#6B7280',
-    lineHeight: 20,
+    lineHeight: 18,
   },
   footerSpacer: {
     height: 40,
