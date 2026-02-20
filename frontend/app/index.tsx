@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-import { loadReservations, loadSettings, getLastUpdate, loadCachedDashboard, cacheDashboard, DEFAULT_SETTINGS } from '../utils/storage';
+import { loadReservations, loadSettings, getLastUpdate, loadCachedDashboard, cacheDashboard, DEFAULT_SETTINGS, saveSettings, saveReservations } from '../utils/storage';
 import { calculateDashboard, DashboardData, generateDemoReservations } from '../utils/calculations';
 import { useLanguage } from '../utils/LanguageContext';
 import { getDayNames, getMonthNames, getFullMonthNames, formatString } from '../utils/i18n';
