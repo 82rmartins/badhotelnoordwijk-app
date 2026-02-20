@@ -284,6 +284,12 @@ export const translations: Record<Language, Translations> = {
     nextDaysBelowTarget: 'Next days also below target.',
     todayOnTarget: 'Today on target.',
     requiresAttention: 'Requires immediate attention.',
+    noCriticalIssues: 'No critical issues identified at this time.',
+    
+    // Status reasons
+    todayOccupancyBelow: 'Reason: today\'s occupancy ({0}%) below target',
+    d7BelowTarget: 'Reason: D+7 ({0}%) below target',
+    d14BelowTarget: 'Reason: D+14 ({0}%) below target',
   },
   nl: {
     // Header
