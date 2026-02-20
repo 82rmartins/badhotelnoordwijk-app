@@ -406,7 +406,7 @@ export default function Dashboard() {
         </View>
         
         <View style={styles.statusRow}>
-          <StatusBadge status={data?.status || 'green'} reason={data?.status_reason} />
+          <StatusBadge status={data?.status || 'green'} reason={data?.status_reason} reasonParams={data?.status_reason_params} />
           <TrendIndicator trend={data?.trend || 'stable'} />
           <RealTimeClock />
         </View>
