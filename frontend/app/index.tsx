@@ -243,19 +243,21 @@ const AlertItem = ({ alert }: { alert: any }) => {
   );
 };
 
-// Simple Weekly Occupancy Chart Component (Custom, no external lib)
+// Simple Weekly Occupancy Chart Component - BIGGER VERSION
 const WeeklyOccupancyChart = ({ weekData }: { weekData: any[] }) => {
   const { t, language } = useLanguage();
   const dayNames = getDayNames(language);
   
   const maxValue = 100;
-  const chartHeight = 80;
+  const chartHeight = 120; // BIGGER
 
   const getBarColor = (value: number) => {
     if (value >= 70) return '#10B981';
     if (value >= 50) return '#F59E0B';
     return '#EF4444';
   };
+
+  if (!weekData || weekData.length === 0) return null;
 
   return (
     <View style={styles.chartContainer}>
@@ -270,10 +272,10 @@ const WeeklyOccupancyChart = ({ weekData }: { weekData: any[] }) => {
         {/* Bars */}
         <View style={styles.barsContainer}>
           {weekData.map((day, index) => {
-            const barHeight = (day.occupancy_percent / maxValue) * chartHeight;
+            const barHeight = Math.max(4, (day.occupancy_percent / maxValue) * chartHeight);
             return (
               <View key={index} style={styles.barWrapper}>
-                <View style={styles.barColumn}>
+                <View style={[styles.barColumn, { height: chartHeight }]}>
                   <View 
                     style={[
                       styles.bar, 
