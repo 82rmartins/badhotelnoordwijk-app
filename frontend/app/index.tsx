@@ -7,7 +7,6 @@ import {
   RefreshControl,
   Dimensions,
   Animated,
-  Platform,
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
@@ -16,56 +15,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-const { width, height } = Dimensions.get('window');
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+import { loadReservations, loadSettings, getLastUpdate, loadCachedDashboard, cacheDashboard, DEFAULT_SETTINGS } from '../utils/storage';
+import { calculateDashboard, DashboardData, generateDemoReservations } from '../utils/calculations';
 
-interface DashboardData {
-  status: 'green' | 'yellow' | 'red';
-  rhythm: 'up' | 'stable' | 'down';
-  last_update: string | null;
-  today: {
-    date: string;
-    rooms_occupied: number;
-    total_rooms: number;
-    occupancy_percent: number;
-    arrivals: number;
-    departures: number;
-    room_revenue: number;
-    parking_revenue: number;
-    vending_revenue: number;
-    city_tax: number;
-    adr: number;
-  };
-  radar: Array<{
-    date: string;
-    day_name: string;
-    day_num: number;
-    month: string;
-    rooms_sold: number;
-    total_rooms: number;
-    occupancy_percent: number;
-    adr: number;
-    target: number;
-    urgency: 'high' | 'medium' | 'low';
-  }>;
-  week: {
-    start: string;
-    end: string;
-    occupancy_avg: number;
-    revenue_total: number;
-    adr_avg: number;
-    trend: 'up' | 'down' | 'stable';
-  };
-  month: {
-    name: string;
-    occupancy_accumulated: number;
-    revenue_accumulated: number;
-    projected_occupancy: number;
-    days_elapsed: number;
-    days_total: number;
-  };
-  alerts: string[];
-}
+const { width } = Dimensions.get('window');
 
 // Animated Counter Component
 const AnimatedCounter = ({ value, suffix = '', prefix = '', decimals = 0, style }: {
@@ -116,8 +69,8 @@ const RealTimeClock = () => {
   );
 };
 
-// Status Badge Component
-const StatusBadge = ({ status }: { status: 'green' | 'yellow' | 'red' }) => {
+// Status Badge Component with Reason
+const StatusBadge = ({ status, reason }: { status: 'green' | 'yellow' | 'red'; reason?: string | null }) => {
   const statusConfig = {
     green: { color: '#10B981', text: 'Sob Controle', icon: 'checkmark-circle' },
     yellow: { color: '#F59E0B', text: 'Atenção', icon: 'warning' },
@@ -127,9 +80,32 @@ const StatusBadge = ({ status }: { status: 'green' | 'yellow' | 'red' }) => {
   const config = statusConfig[status];
 
   return (
-    <View style={[styles.statusBadge, { backgroundColor: config.color + '20' }]}>
-      <Ionicons name={config.icon as any} size={16} color={config.color} />
-      <Text style={[styles.statusText, { color: config.color }]}>{config.text}</Text>
+    <View style={styles.statusContainer}>
+      <View style={[styles.statusBadge, { backgroundColor: config.color + '20' }]}>
+        <Ionicons name={config.icon as any} size={16} color={config.color} />
+        <Text style={[styles.statusText, { color: config.color }]}>{config.text}</Text>
+      </View>
+      {reason && status !== 'green' && (
+        <Text style={[styles.statusReason, { color: config.color }]}>{reason}</Text>
+      )}
+    </View>
+  );
+};
+
+// Trend Indicator Component (↑ → ↓)
+const TrendIndicator = ({ trend }: { trend: 'improving' | 'stable' | 'worsening' }) => {
+  const trendConfig = {
+    improving: { icon: '↑', text: 'Melhorando', color: '#10B981' },
+    stable: { icon: '→', text: 'Estável', color: '#6B7280' },
+    worsening: { icon: '↓', text: 'Piorando', color: '#EF4444' },
+  };
+
+  const config = trendConfig[trend];
+
+  return (
+    <View style={styles.trendContainer}>
+      <Text style={[styles.trendArrow, { color: config.color }]}>{config.icon}</Text>
+      <Text style={[styles.trendText, { color: config.color }]}>{config.text}</Text>
     </View>
   );
 };
@@ -138,7 +114,7 @@ const StatusBadge = ({ status }: { status: 'green' | 'yellow' | 'red' }) => {
 const RhythmIndicator = ({ rhythm }: { rhythm: 'up' | 'stable' | 'down' }) => {
   const rhythmConfig = {
     up: { icon: 'trending-up', text: 'Acelerando', color: '#10B981' },
-    stable: { icon: 'trending-up', text: 'Estável', color: '#6B7280', rotation: 0 },
+    stable: { icon: 'remove', text: 'Estável', color: '#6B7280' },
     down: { icon: 'trending-down', text: 'Desacelerando', color: '#EF4444' },
   };
 
@@ -201,24 +177,68 @@ const RadarDayCard = ({ day, index }: { day: any; index: number }) => {
   );
 };
 
+// Enhanced Alert Component
+const AlertItem = ({ alert }: { alert: any }) => {
+  const getStatusColor = (status: string) => {
+    if (status === 'ok') return '#10B981';
+    if (status === 'warning') return '#F59E0B';
+    return '#EF4444';
+  };
+
+  return (
+    <View style={styles.alertItem}>
+      <View style={styles.alertIndicators}>
+        <View style={[styles.alertDot, { backgroundColor: getStatusColor(alert.today_status) }]} />
+        <View style={styles.alertDotConnector} />
+        <View style={[styles.alertDot, { backgroundColor: getStatusColor(alert.future_status) }]} />
+      </View>
+      <View style={styles.alertContent}>
+        <Text style={styles.alertText}>{alert.message}</Text>
+        {alert.context ? (
+          <Text style={styles.alertContext}>{alert.context}</Text>
+        ) : null}
+      </View>
+    </View>
+  );
+};
+
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const scrollY = useRef(new Animated.Value(0)).current;
   const router = useRouter();
 
-  const fetchDashboard = useCallback(async () => {
+  const loadDashboard = useCallback(async () => {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/dashboard`);
-      if (!response.ok) throw new Error('Failed to fetch dashboard');
-      const result = await response.json();
-      setData(result);
-      setError(null);
-    } catch (err: any) {
-      console.error('Error fetching dashboard:', err);
-      setError(err.message);
+      // Load from local storage
+      let reservations = await loadReservations();
+      const settings = await loadSettings();
+      const lastUpdate = await getLastUpdate();
+      
+      // If no data, try to load cached dashboard
+      if (reservations.length === 0) {
+        const cached = await loadCachedDashboard();
+        if (cached) {
+          setData(cached);
+          setLoading(false);
+          setRefreshing(false);
+          return;
+        }
+        // Generate demo data for first use
+        reservations = generateDemoReservations(settings);
+      }
+      
+      // Calculate dashboard
+      const dashboardData = calculateDashboard(reservations, settings, lastUpdate);
+      setData(dashboardData);
+      
+      // Cache for offline access
+      await cacheDashboard(dashboardData);
+    } catch (err) {
+      console.error('Error loading dashboard:', err);
+      // Try to load cached version
+      const cached = await loadCachedDashboard();
+      if (cached) setData(cached);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -226,16 +246,13 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    fetchDashboard();
-    // Auto-refresh every 60 seconds
-    const interval = setInterval(fetchDashboard, 60000);
-    return () => clearInterval(interval);
-  }, [fetchDashboard]);
+    loadDashboard();
+  }, [loadDashboard]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchDashboard();
-  }, [fetchDashboard]);
+    loadDashboard();
+  }, [loadDashboard]);
 
   const formatCurrency = (value: number) => `€${value.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
@@ -276,8 +293,8 @@ export default function Dashboard() {
         </View>
         
         <View style={styles.statusRow}>
-          <StatusBadge status={data?.status || 'green'} />
-          <RhythmIndicator rhythm={data?.rhythm || 'stable'} />
+          <StatusBadge status={data?.status || 'green'} reason={data?.status_reason} />
+          <TrendIndicator trend={data?.trend || 'stable'} />
           <RealTimeClock />
         </View>
         
@@ -298,11 +315,6 @@ export default function Dashboard() {
             tintColor="#10B981"
           />
         }
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: false }
-        )}
-        scrollEventThrottle={16}
       >
         {/* Section 1: TODAY */}
         <View style={styles.section}>
@@ -393,17 +405,24 @@ export default function Dashboard() {
             ))}
           </ScrollView>
 
-          {/* Alerts Box */}
+          {/* Enhanced Alerts Box */}
           <View style={styles.alertsBox}>
             <View style={styles.alertsHeader}>
               <Ionicons name="alert-circle" size={18} color="#F59E0B" />
               <Text style={styles.alertsTitle}>O que merece atenção</Text>
             </View>
-            {data?.alerts.map((alert, index) => (
-              <View key={index} style={styles.alertItem}>
-                <View style={styles.alertDot} />
-                <Text style={styles.alertText}>{alert}</Text>
+            <View style={styles.alertLegend}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#6B7280' }]} />
+                <Text style={styles.legendText}>hoje</Text>
               </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#6B7280' }]} />
+                <Text style={styles.legendText}>próx. dias</Text>
+              </View>
+            </View>
+            {data?.alerts.map((alert, index) => (
+              <AlertItem key={index} alert={alert} />
             ))}
           </View>
         </View>
@@ -427,7 +446,7 @@ export default function Dashboard() {
                   color={data?.week.trend === 'up' ? '#10B981' : data?.week.trend === 'down' ? '#EF4444' : '#6B7280'}
                 />
                 <Text style={[
-                  styles.trendText,
+                  styles.weekTrendText,
                   { color: data?.week.trend === 'up' ? '#10B981' : data?.week.trend === 'down' ? '#EF4444' : '#6B7280' }
                 ]}>
                   {data?.week.trend === 'up' ? 'vs anterior' : data?.week.trend === 'down' ? 'vs anterior' : 'estável'}
@@ -547,7 +566,13 @@ const styles = StyleSheet.create({
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  statusContainer: {
+    flexDirection: 'column',
+    gap: 2,
   },
   statusBadge: {
     flexDirection: 'row',
@@ -560,6 +585,24 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  statusReason: {
+    fontSize: 10,
+    marginTop: 2,
+    marginLeft: 4,
+  },
+  trendContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  trendArrow: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  trendText: {
+    fontSize: 11,
+    fontWeight: '500',
   },
   rhythmContainer: {
     flexDirection: 'row',
@@ -575,7 +618,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
     fontVariant: ['tabular-nums'],
-    marginLeft: 'auto',
   },
   lastUpdate: {
     fontSize: 11,
@@ -809,7 +851,7 @@ const styles = StyleSheet.create({
   alertsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
     gap: 8,
   },
   alertsTitle: {
@@ -817,24 +859,61 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  alertItem: {
+  alertLegend: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginVertical: 6,
-    gap: 10,
+    gap: 16,
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1F1F23',
   },
-  alertDot: {
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  legendDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#F59E0B',
-    marginTop: 5,
+  },
+  legendText: {
+    fontSize: 10,
+    color: '#6B7280',
+  },
+  alertItem: {
+    flexDirection: 'row',
+    marginVertical: 8,
+    gap: 12,
+  },
+  alertIndicators: {
+    alignItems: 'center',
+    width: 20,
+  },
+  alertDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  alertDotConnector: {
+    width: 1,
+    height: 8,
+    backgroundColor: '#374151',
+    marginVertical: 2,
+  },
+  alertContent: {
+    flex: 1,
   },
   alertText: {
     fontSize: 13,
     color: '#D1D5DB',
-    flex: 1,
     lineHeight: 18,
+  },
+  alertContext: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 2,
+    fontStyle: 'italic',
   },
   controlCard: {
     backgroundColor: '#111113',
@@ -860,7 +939,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  trendText: {
+  weekTrendText: {
     fontSize: 11,
     fontWeight: '500',
   },
