@@ -131,7 +131,7 @@ export interface Translations {
   dataCleared: string;
   v1Architecture: string;
   
-  // Alerts
+  // Alerts - message keys
   occupancyBelowTarget: string;
   criticalDaysAhead: string;
   consecutiveLowDays: string;
@@ -139,6 +139,12 @@ export interface Translations {
   nextDaysBelowTarget: string;
   todayOnTarget: string;
   requiresAttention: string;
+  noCriticalIssues: string;
+  
+  // Status reasons
+  todayOccupancyBelow: string;
+  d7BelowTarget: string;
+  d14BelowTarget: string;
 }
 
 export const translations: Record<Language, Translations> = {
