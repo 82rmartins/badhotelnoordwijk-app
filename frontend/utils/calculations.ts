@@ -17,15 +17,17 @@ export interface DailyStats {
 }
 
 export interface EnhancedAlert {
-  message: string;
+  message: string;  // Translation key
+  message_params?: string[];  // Parameters for translation
   today_status: 'ok' | 'warning' | 'critical';
   future_status: 'ok' | 'warning' | 'critical';
-  context: string;
+  context: string;  // Translation key or empty
 }
 
 export interface DashboardData {
   status: 'green' | 'yellow' | 'red';
-  status_reason: string | null;
+  status_reason: string | null;  // Translation key
+  status_reason_params?: string[];  // Parameters for translation
   rhythm: 'up' | 'stable' | 'down';
   trend: 'improving' | 'stable' | 'worsening';
   last_update: string | null;
