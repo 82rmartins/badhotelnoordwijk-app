@@ -192,6 +192,10 @@ async def get_settings():
         default_settings = HotelSettings()
         await db.settings.insert_one(default_settings.dict())
         return default_settings.dict()
+    
+    # Remove MongoDB ObjectId to avoid serialization issues
+    if "_id" in settings:
+        del settings["_id"]
     return settings
 
 @api_router.put("/settings")
