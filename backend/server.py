@@ -75,13 +75,15 @@ class HotelSettings(BaseModel):
 
 class DashboardResponse(BaseModel):
     status: str  # "green", "yellow", "red"
+    status_reason: Optional[str]  # Short reason when status is yellow/red
     rhythm: str  # "up", "stable", "down"
+    trend: str  # "improving", "stable", "worsening" - based on 7-day comparison
     last_update: Optional[datetime]
     today: Dict[str, Any]
     radar: List[Dict[str, Any]]
     week: Dict[str, Any]
     month: Dict[str, Any]
-    alerts: List[str]
+    alerts: List[Dict[str, Any]]  # Enhanced alerts with context
 
 # ============== HELPER FUNCTIONS ==============
 
