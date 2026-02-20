@@ -148,9 +148,24 @@ const PaginationDots = ({ total, current }: { total: number; current: number }) 
 );
 
 // Day Card Component (for swipeable Today section)
-const DayCard = ({ dayStats, dayLabel, isToday }: { dayStats: DailyStats; dayLabel: string; isToday: boolean }) => {
+const DayCard = ({ dayStats, dayLabel, isToday }: { dayStats: DailyStats | null; dayLabel: string; isToday: boolean }) => {
   const { t } = useLanguage();
-  const formatCurrency = (value: number) => `€${value.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const formatCurrency = (value: number) => `€${(value || 0).toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+  if (!dayStats) {
+    return (
+      <View style={[styles.dayCard, { width: CARD_WIDTH }]}>
+        <Text style={styles.dayCardLabel}>{dayLabel}</Text>
+        <ActivityIndicator color="#10B981" style={{ marginTop: 40 }} />
+      </View>
+    );
+  }
+
+  const occupancy = dayStats.occupancy_percent || 0;
+  const roomsOccupied = dayStats.rooms_occupied || 0;
+  const totalRooms = dayStats.total_rooms || 26;
+  const arrivals = dayStats.arrivals || 0;
+  const departures = dayStats.departures || 0;
 
   return (
     <View style={[styles.dayCard, { width: CARD_WIDTH }]}>
@@ -159,20 +174,20 @@ const DayCard = ({ dayStats, dayLabel, isToday }: { dayStats: DailyStats; dayLab
       <View style={styles.dayCardGrid}>
         <View style={styles.dayCardOccupancy}>
           <Text style={styles.dayCardOccLabel}>{t.occupancy}</Text>
-          <Text style={styles.dayCardOccValue}>{dayStats.occupancy_percent.toFixed(0)}%</Text>
-          <Text style={styles.dayCardOccRooms}>{dayStats.rooms_occupied} / {dayStats.total_rooms} {t.rooms}</Text>
+          <Text style={styles.dayCardOccValue}>{occupancy.toFixed(0)}%</Text>
+          <Text style={styles.dayCardOccRooms}>{roomsOccupied} / {totalRooms} {t.rooms}</Text>
         </View>
         
         <View style={styles.dayCardArrDep}>
           <View style={styles.dayCardArrDepItem}>
             <Ionicons name="log-in" size={16} color="#10B981" />
-            <Text style={styles.dayCardArrDepValue}>{dayStats.arrivals}</Text>
+            <Text style={styles.dayCardArrDepValue}>{arrivals}</Text>
             <Text style={styles.dayCardArrDepLabel}>{t.arrivals}</Text>
           </View>
           <View style={styles.dayCardDivider} />
           <View style={styles.dayCardArrDepItem}>
             <Ionicons name="log-out" size={16} color="#F59E0B" />
-            <Text style={styles.dayCardArrDepValue}>{dayStats.departures}</Text>
+            <Text style={styles.dayCardArrDepValue}>{departures}</Text>
             <Text style={styles.dayCardArrDepLabel}>{t.departures}</Text>
           </View>
         </View>
