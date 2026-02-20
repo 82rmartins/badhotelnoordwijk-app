@@ -219,7 +219,11 @@ async def update_settings(total_rooms: int = 24, high_season_target: float = 85.
             "low_season_target": low_season_target
         }}
     )
-    return await db.settings.find_one()
+    updated_settings = await db.settings.find_one()
+    # Remove MongoDB ObjectId to avoid serialization issues
+    if "_id" in updated_settings:
+        del updated_settings["_id"]
+    return updated_settings
 
 @api_router.post("/upload/reservations")
 async def upload_reservations(file: UploadFile = File(...)):
