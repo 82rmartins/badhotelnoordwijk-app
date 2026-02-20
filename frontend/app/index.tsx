@@ -20,6 +20,48 @@ import { calculateDashboard, DashboardData, generateDemoReservations } from '../
 
 const { width } = Dimensions.get('window');
 
+// Hotel Logo Component (SVG-style rendering)
+const HotelLogo = ({ size = 40 }: { size?: number }) => {
+  return (
+    <View style={[logoStyles.container, { width: size, height: size }]}>
+      {/* Top half - lighter blue */}
+      <View style={[logoStyles.topHalf, { borderTopLeftRadius: size/2, borderTopRightRadius: size/2 }]} />
+      {/* Bottom half - darker blue with wave */}
+      <View style={[logoStyles.bottomHalf, { borderBottomLeftRadius: size/2, borderBottomRightRadius: size/2 }]}>
+        {/* Wave effect */}
+        <View style={logoStyles.wave} />
+      </View>
+    </View>
+  );
+};
+
+const logoStyles = StyleSheet.create({
+  container: {
+    overflow: 'hidden',
+    borderRadius: 999,
+  },
+  topHalf: {
+    flex: 1,
+    backgroundColor: '#8FAFC4', // Light blue
+  },
+  bottomHalf: {
+    flex: 1,
+    backgroundColor: '#5F7F94', // Darker blue
+    position: 'relative',
+  },
+  wave: {
+    position: 'absolute',
+    top: -6,
+    left: 0,
+    right: 0,
+    height: 12,
+    backgroundColor: '#8FAFC4',
+    borderBottomLeftRadius: 100,
+    borderBottomRightRadius: 100,
+    transform: [{ scaleX: 1.5 }],
+  },
+});
+
 // Animated Counter Component
 const AnimatedCounter = ({ value, suffix = '', prefix = '', decimals = 0, style }: {
   value: number;
