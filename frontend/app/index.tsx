@@ -171,13 +171,45 @@ const RadarDayCard = ({ day, index }: { day: any; index: number }) => {
   );
 };
 
-// Enhanced Alert Component
+// Enhanced Alert Component with translations
 const AlertItem = ({ alert }: { alert: any }) => {
+  const { t } = useLanguage();
+  
   const getStatusColor = (status: string) => {
     if (status === 'ok') return '#10B981';
     if (status === 'warning') return '#F59E0B';
     return '#EF4444';
   };
+
+  // Translate alert message
+  const translateMessage = (messageKey: string, params: string[] = []) => {
+    const translationMap: Record<string, string> = {
+      'occupancy_below_target': t.occupancyBelowTarget,
+      'critical_days_ahead': t.criticalDaysAhead,
+      'consecutive_low_days': t.consecutiveLowDays,
+      'no_critical_issues': t.noCriticalIssues,
+    };
+    
+    let message = translationMap[messageKey] || messageKey;
+    params.forEach((param, index) => {
+      message = message.replace(`{${index}}`, param);
+    });
+    return message;
+  };
+
+  // Translate context
+  const translateContext = (contextKey: string) => {
+    const contextMap: Record<string, string> = {
+      'next_days_on_track': t.nextDaysOnTrack,
+      'next_days_below_target': t.nextDaysBelowTarget,
+      'today_on_target': t.todayOnTarget,
+      'requires_attention': t.requiresAttention,
+    };
+    return contextMap[contextKey] || contextKey;
+  };
+
+  const message = translateMessage(alert.message, alert.message_params || []);
+  const context = alert.context ? translateContext(alert.context) : '';
 
   return (
     <View style={styles.alertItem}>
@@ -187,8 +219,8 @@ const AlertItem = ({ alert }: { alert: any }) => {
         <View style={[styles.alertDot, { backgroundColor: getStatusColor(alert.future_status) }]} />
       </View>
       <View style={styles.alertContent}>
-        <Text style={styles.alertText}>{alert.message}</Text>
-        {alert.context ? <Text style={styles.alertContext}>{alert.context}</Text> : null}
+        <Text style={styles.alertText}>{message}</Text>
+        {context ? <Text style={styles.alertContext}>{context}</Text> : null}
       </View>
     </View>
   );
