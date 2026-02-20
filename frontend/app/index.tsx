@@ -307,21 +307,25 @@ export default function Dashboard() {
 
   const loadDashboard = useCallback(async () => {
     try {
-      let reservations = await loadReservations();
+      // ALWAYS load fresh settings first
       const settings = await loadSettings();
-      const lastUpdate = await getLastUpdate();
       
-      if (reservations.length === 0) {
-        const cached = await loadCachedDashboard();
-        if (cached) {
-          setData(cached);
-          setLoading(false);
-          setRefreshing(false);
-          return;
-        }
-        reservations = generateDemoReservations(settings);
+      // Force settings to have 26 rooms if not set
+      if (settings.total_rooms !== 26) {
+        settings.total_rooms = 26;
+        await saveSettings(settings);
       }
       
+      let reservations = await loadReservations();
+      const lastUpdate = await getLastUpdate();
+      
+      // If no reservations, generate demo data with correct settings
+      if (reservations.length === 0) {
+        reservations = generateDemoReservations(settings);
+        await saveReservations(reservations);
+      }
+      
+      // ALWAYS calculate fresh dashboard (don't use cache for data)
       const dashboardData = calculateDashboard(reservations, settings, lastUpdate);
       setData(dashboardData);
       
@@ -346,11 +350,8 @@ export default function Dashboard() {
       }
       setWeekChartData(weekStats);
       
-      await cacheDashboard(dashboardData);
     } catch (err) {
       console.error('Error loading dashboard:', err);
-      const cached = await loadCachedDashboard();
-      if (cached) setData(cached);
     } finally {
       setLoading(false);
       setRefreshing(false);
