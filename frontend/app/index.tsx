@@ -194,38 +194,54 @@ const AlertItem = ({ alert }: { alert: any }) => {
   );
 };
 
-// Weekly Occupancy Chart Component
+// Simple Weekly Occupancy Chart Component (Custom, no external lib)
 const WeeklyOccupancyChart = ({ weekData }: { weekData: any[] }) => {
   const { t, language } = useLanguage();
   const dayNames = getDayNames(language);
   
-  const barData = weekData.map((day, index) => ({
-    value: day.occupancy_percent,
-    label: dayNames[index],
-    frontColor: day.occupancy_percent >= 70 ? '#10B981' : day.occupancy_percent >= 50 ? '#F59E0B' : '#EF4444',
-  }));
+  const maxValue = 100;
+  const chartHeight = 80;
+
+  const getBarColor = (value: number) => {
+    if (value >= 70) return '#10B981';
+    if (value >= 50) return '#F59E0B';
+    return '#EF4444';
+  };
 
   return (
     <View style={styles.chartContainer}>
       <Text style={styles.chartTitle}>{t.weeklyOccupancy}</Text>
-      <BarChart
-        data={barData}
-        barWidth={28}
-        spacing={12}
-        roundedTop
-        roundedBottom
-        hideRules
-        xAxisThickness={0}
-        yAxisThickness={0}
-        yAxisTextStyle={{ color: '#6B7280', fontSize: 10 }}
-        xAxisLabelTextStyle={{ color: '#9CA3AF', fontSize: 10 }}
-        noOfSections={4}
-        maxValue={100}
-        height={100}
-        barBorderRadius={4}
-        yAxisLabelSuffix="%"
-        isAnimated
-      />
+      <View style={styles.chartWrapper}>
+        {/* Y-axis labels */}
+        <View style={styles.yAxis}>
+          <Text style={styles.yAxisLabel}>100%</Text>
+          <Text style={styles.yAxisLabel}>50%</Text>
+          <Text style={styles.yAxisLabel}>0%</Text>
+        </View>
+        {/* Bars */}
+        <View style={styles.barsContainer}>
+          {weekData.map((day, index) => {
+            const barHeight = (day.occupancy_percent / maxValue) * chartHeight;
+            return (
+              <View key={index} style={styles.barWrapper}>
+                <View style={styles.barColumn}>
+                  <View 
+                    style={[
+                      styles.bar, 
+                      { 
+                        height: barHeight, 
+                        backgroundColor: getBarColor(day.occupancy_percent) 
+                      }
+                    ]} 
+                  />
+                </View>
+                <Text style={styles.barLabel}>{dayNames[index]}</Text>
+                <Text style={styles.barValue}>{day.occupancy_percent.toFixed(0)}%</Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
     </View>
   );
 };
