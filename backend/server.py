@@ -97,16 +97,17 @@ def get_season_target(date: datetime, settings: dict) -> float:
         return settings.get('high_season_target', 85.0)
     return settings.get('low_season_target', 65.0)
 
-def calculate_status(today_stats: dict, radar_stats: list, settings: dict) -> str:
+def calculate_status_with_reason(today_stats: dict, radar_stats: list, settings: dict) -> tuple:
     """
-    Calculate hotel status based on aggressive logic:
-    - Green: Occupancy D+7 and D+14 meet season targets
-    - Yellow: One of D+7 or D+14 below target
-    - Red: Both below target or significant issues
+    Calculate hotel status with reason for yellow/red status.
+    Returns: (status, reason)
     """
     today = datetime.utcnow()
+    today_target = get_season_target(today, settings)
     d7_target = get_season_target(today + timedelta(days=7), settings)
     d14_target = get_season_target(today + timedelta(days=14), settings)
+    
+    today_occ = today_stats.get('occupancy_percent', 0)
     
     # Get D+7 and D+14 occupancy from radar
     d7_occ = 0
@@ -119,16 +120,27 @@ def calculate_status(today_stats: dict, radar_stats: list, settings: dict) -> st
         if 13 <= days_ahead <= 15:
             d14_occ = stat.get('occupancy_percent', 0)
     
-    # Status logic
-    d7_ok = d7_occ >= d7_target * 0.9  # 90% of target is acceptable
-    d14_ok = d14_occ >= d14_target * 0.8  # 80% of target for D+14
+    # Check conditions and build reasons
+    reasons = []
     
-    if d7_ok and d14_ok:
-        return "green"
-    elif d7_ok or d14_ok:
-        return "yellow"
+    today_ok = today_occ >= today_target * 0.8
+    d7_ok = d7_occ >= d7_target * 0.9
+    d14_ok = d14_occ >= d14_target * 0.8
+    
+    if not today_ok:
+        reasons.append(f"ocupação hoje ({today_occ:.0f}%) abaixo da meta")
+    if not d7_ok:
+        reasons.append(f"D+7 ({d7_occ:.0f}%) abaixo do alvo")
+    if not d14_ok:
+        reasons.append(f"D+14 ({d14_occ:.0f}%) abaixo do alvo")
+    
+    # Determine status
+    if today_ok and d7_ok and d14_ok:
+        return ("green", None)
+    elif len(reasons) <= 1:
+        return ("yellow", f"Motivo: {reasons[0]}" if reasons else None)
     else:
-        return "red"
+        return ("red", f"Motivo: {reasons[0]}")
 
 def calculate_rhythm(current_week_revenue: float, previous_week_revenue: float) -> str:
     """Calculate rhythm based on week-over-week revenue comparison"""
