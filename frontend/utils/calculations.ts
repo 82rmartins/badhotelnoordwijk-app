@@ -243,7 +243,7 @@ function calculateTrend(
   return 'stable';
 }
 
-// Generate enhanced alerts
+// Generate enhanced alerts - returns keys for translation
 function generateEnhancedAlerts(
   todayStats: DailyStats,
   radarStats: DailyStats[],
@@ -264,15 +264,12 @@ function generateEnhancedAlerts(
   
   // Alert 1: Today's occupancy
   if (todayBelow) {
-    const context = futureOk 
-      ? 'Próximos dias dentro do ritmo esperado.'
-      : 'Próximos dias também abaixo da meta.';
-    
     alerts.push({
-      message: `Ocupação hoje (${todayOcc.toFixed(0)}%) abaixo da meta (${todayTarget.toFixed(0)}%)`,
+      message: 'occupancy_below_target',
+      message_params: [todayOcc.toFixed(0), todayTarget.toFixed(0)],
       today_status: 'critical',
       future_status: futureOk ? 'ok' : 'critical',
-      context,
+      context: futureOk ? 'next_days_on_track' : 'next_days_below_target',
     });
   }
   
@@ -283,12 +280,12 @@ function generateEnhancedAlerts(
   });
   
   if (lowDays.length >= 2 && alerts.length < 3) {
-    const todayContext = todayBelow ? '' : 'Hoje dentro da meta.';
     alerts.push({
-      message: `${lowDays.length} dias críticos nos próximos 7 dias`,
+      message: 'critical_days_ahead',
+      message_params: [lowDays.length.toString()],
       today_status: todayBelow ? 'critical' : 'ok',
       future_status: 'critical',
-      context: todayContext,
+      context: todayBelow ? '' : 'today_on_target',
     });
   }
   
@@ -304,17 +301,19 @@ function generateEnhancedAlerts(
   
   if (consecutiveWeak >= 3 && alerts.length < 3) {
     alerts.push({
-      message: `${consecutiveWeak} dias consecutivos com ocupação baixa`,
+      message: 'consecutive_low_days',
+      message_params: [consecutiveWeak.toString()],
       today_status: todayBelow ? 'critical' : 'warning',
       future_status: 'critical',
-      context: 'Requer atenção imediata.',
+      context: 'requires_attention',
     });
   }
   
   // No critical issues
   if (alerts.length === 0) {
     alerts.push({
-      message: 'Nenhum ponto crítico identificado no momento.',
+      message: 'no_critical_issues',
+      message_params: [],
       today_status: 'ok',
       future_status: 'ok',
       context: '',
