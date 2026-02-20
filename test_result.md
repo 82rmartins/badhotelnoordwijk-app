@@ -111,11 +111,14 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "main"
           comment: "GET /api/dashboard returns complete dashboard data with status, rhythm, today stats, radar 14 days, week and month aggregations"
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Dashboard API fully functional - returns complete data structure with status (yellow), rhythm, today stats (46.2% occupancy, €2275.51 revenue), 14-day radar forecast, week/month aggregations, and alerts array"
 
   - task: "CSV upload for reservations"
     implemented: true
@@ -123,11 +126,14 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "main"
           comment: "POST /api/upload/reservations accepts CSV files, parses multiple date formats, and recalculates daily stats"
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: CSV upload working correctly - processed 10 reservations (added), handles multiple date formats, recalculates daily stats automatically"
 
   - task: "Seed demo data endpoint"
     implemented: true
@@ -135,23 +141,32 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "main"
           comment: "POST /api/seed-demo-data generates realistic hotel reservation data for testing"
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Demo data seeding working perfectly - created 313 realistic reservations with varied occupancy patterns, revenue calculations, and proper date ranges"
 
   - task: "Settings API"
     implemented: true
     working: true
     file: "/app/backend/server.py"
-    stuck_count: 0
+    stuck_count: 1
     priority: "low"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "main"
           comment: "GET/PUT /api/settings for hotel configuration (rooms, season targets)"
+        - working: false
+          agent: "testing"
+          comment: "❌ CRITICAL BUG FOUND: Settings API failing with MongoDB ObjectId serialization error (HTTP 520). Root cause: FastAPI cannot serialize MongoDB ObjectId objects to JSON"
+        - working: true
+          agent: "testing"
+          comment: "✅ FIXED & TESTED: Settings API now working - fixed ObjectId serialization by removing _id field before response. GET returns all required fields (total_rooms: 24, targets: 85%/65%), PUT updates work correctly"
 
 frontend:
   - task: "Executive Dashboard UI"
