@@ -178,12 +178,12 @@ export function calculateDailyStats(
   };
 }
 
-// Calculate status with reason
+// Calculate status with reason - returns keys for translation
 function calculateStatusWithReason(
   todayStats: DailyStats,
   radarStats: DailyStats[],
   settings: HotelSettings
-): { status: 'green' | 'yellow' | 'red'; reason: string | null } {
+): { status: 'green' | 'yellow' | 'red'; reason: string | null; reason_params: string[] } {
   const today = new Date();
   const todayTarget = getSeasonTarget(today, settings);
   const d7Target = getSeasonTarget(addDays(today, 7), settings);
@@ -193,29 +193,33 @@ function calculateStatusWithReason(
   const d7Occ = radarStats[6]?.occupancy_percent || 0;
   const d14Occ = radarStats[13]?.occupancy_percent || 0;
   
-  const reasons: string[] = [];
-  
   const todayOk = todayOcc >= todayTarget * 0.8;
   const d7Ok = d7Occ >= d7Target * 0.9;
   const d14Ok = d14Occ >= d14Target * 0.8;
   
+  // Build reason with translation key
   if (!todayOk) {
-    reasons.push(`ocupação hoje (${todayOcc.toFixed(0)}%) abaixo da meta`);
-  }
-  if (!d7Ok) {
-    reasons.push(`D+7 (${d7Occ.toFixed(0)}%) abaixo do alvo`);
-  }
-  if (!d14Ok) {
-    reasons.push(`D+14 (${d14Occ.toFixed(0)}%) abaixo do alvo`);
+    const key = 'today_occupancy_below';
+    const params = [todayOcc.toFixed(0)];
+    if (todayOk && d7Ok && d14Ok) {
+      return { status: 'green', reason: null, reason_params: [] };
+    }
+    return { status: d7Ok || d14Ok ? 'yellow' : 'red', reason: key, reason_params: params };
   }
   
-  if (todayOk && d7Ok && d14Ok) {
-    return { status: 'green', reason: null };
-  } else if (reasons.length <= 1) {
-    return { status: 'yellow', reason: reasons.length > 0 ? `Motivo: ${reasons[0]}` : null };
-  } else {
-    return { status: 'red', reason: `Motivo: ${reasons[0]}` };
+  if (!d7Ok) {
+    const key = 'd7_below_target';
+    const params = [d7Occ.toFixed(0)];
+    return { status: d14Ok ? 'yellow' : 'red', reason: key, reason_params: params };
   }
+  
+  if (!d14Ok) {
+    const key = 'd14_below_target';
+    const params = [d14Occ.toFixed(0)];
+    return { status: 'yellow', reason: key, reason_params: params };
+  }
+  
+  return { status: 'green', reason: null, reason_params: [] };
 }
 
 // Calculate rhythm (week-over-week revenue)
