@@ -211,8 +211,10 @@ async def update_settings(total_rooms: int = 24, high_season_target: float = 85.
         await db.settings.insert_one(new_settings.dict())
         return new_settings.dict()
     
+    # Update using MongoDB _id or custom id field
+    query_field = "_id" if "_id" in settings else "id"
     await db.settings.update_one(
-        {"id": settings["id"]},
+        {query_field: settings[query_field]},
         {"$set": {
             "total_rooms": total_rooms,
             "high_season_target": high_season_target,
