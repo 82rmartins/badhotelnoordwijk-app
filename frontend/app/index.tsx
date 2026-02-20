@@ -14,7 +14,6 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { BarChart } from 'react-native-gifted-charts';
 
 import { loadReservations, loadSettings, getLastUpdate, loadCachedDashboard, cacheDashboard, DEFAULT_SETTINGS } from '../utils/storage';
 import { calculateDashboard, DashboardData, generateDemoReservations } from '../utils/calculations';
