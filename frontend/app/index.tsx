@@ -83,8 +83,8 @@ const LanguageToggle = () => {
   );
 };
 
-// Status Badge Component with Reason
-const StatusBadge = ({ status, reason }: { status: 'green' | 'yellow' | 'red'; reason?: string | null }) => {
+// Status Badge Component with Reason and translations
+const StatusBadge = ({ status, reason, reasonParams }: { status: 'green' | 'yellow' | 'red'; reason?: string | null; reasonParams?: string[] }) => {
   const { t } = useLanguage();
   const statusConfig = {
     green: { color: '#10B981', text: t.underControl, icon: 'checkmark-circle' },
@@ -93,14 +93,31 @@ const StatusBadge = ({ status, reason }: { status: 'green' | 'yellow' | 'red'; r
   };
   const config = statusConfig[status];
 
+  // Translate reason
+  const translateReason = (reasonKey: string | null, params: string[] = []) => {
+    if (!reasonKey) return null;
+    const reasonMap: Record<string, string> = {
+      'today_occupancy_below': t.todayOccupancyBelow,
+      'd7_below_target': t.d7BelowTarget,
+      'd14_below_target': t.d14BelowTarget,
+    };
+    let message = reasonMap[reasonKey] || reasonKey;
+    params.forEach((param, index) => {
+      message = message.replace(`{${index}}`, param);
+    });
+    return message;
+  };
+
+  const translatedReason = reason ? translateReason(reason, reasonParams || []) : null;
+
   return (
     <View style={styles.statusContainer}>
       <View style={[styles.statusBadge, { backgroundColor: config.color + '20' }]}>
         <Ionicons name={config.icon as any} size={16} color={config.color} />
         <Text style={[styles.statusText, { color: config.color }]}>{config.text}</Text>
       </View>
-      {reason && status !== 'green' && (
-        <Text style={[styles.statusReason, { color: config.color }]}>{reason}</Text>
+      {translatedReason && status !== 'green' && (
+        <Text style={[styles.statusReason, { color: config.color }]}>{translatedReason}</Text>
       )}
     </View>
   );
