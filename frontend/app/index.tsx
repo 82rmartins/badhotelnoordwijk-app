@@ -9,6 +9,8 @@ import {
   Animated,
   TouchableOpacity,
   ActivityIndicator,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,23 +18,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import { loadReservations, loadSettings, getLastUpdate, loadCachedDashboard, cacheDashboard, DEFAULT_SETTINGS, saveSettings, saveReservations } from '../utils/storage';
-import { calculateDashboard, DashboardData, generateDemoReservations } from '../utils/calculations';
+import { calculateDashboard, DashboardData, generateDemoReservations, calculateDailyStats, DailyStats } from '../utils/calculations';
 import { useLanguage } from '../utils/LanguageContext';
 import { getDayNames, getMonthNames, getFullMonthNames, formatString } from '../utils/i18n';
 
 const { width } = Dimensions.get('window');
+const CARD_WIDTH = width - 32;
 
 // Hotel Logo Component
-const HotelLogo = ({ size = 40 }: { size?: number }) => {
-  return (
-    <View style={[logoStyles.container, { width: size, height: size }]}>
-      <View style={[logoStyles.topHalf, { borderTopLeftRadius: size/2, borderTopRightRadius: size/2 }]} />
-      <View style={[logoStyles.bottomHalf, { borderBottomLeftRadius: size/2, borderBottomRightRadius: size/2 }]}>
-        <View style={logoStyles.wave} />
-      </View>
+const HotelLogo = ({ size = 40 }: { size?: number }) => (
+  <View style={[logoStyles.container, { width: size, height: size }]}>
+    <View style={[logoStyles.topHalf, { borderTopLeftRadius: size/2, borderTopRightRadius: size/2 }]} />
+    <View style={[logoStyles.bottomHalf, { borderBottomLeftRadius: size/2, borderBottomRightRadius: size/2 }]}>
+      <View style={logoStyles.wave} />
     </View>
-  );
-};
+  </View>
+);
 
 const logoStyles = StyleSheet.create({
   container: { overflow: 'hidden', borderRadius: 999 },
@@ -50,7 +51,7 @@ const AnimatedCounter = ({ value, suffix = '', prefix = '', decimals = 0, style 
 
   useEffect(() => {
     animatedValue.setValue(0);
-    Animated.timing(animatedValue, { toValue: value, duration: 1000, useNativeDriver: false }).start();
+    Animated.timing(animatedValue, { toValue: value, duration: 800, useNativeDriver: false }).start();
     const listener = animatedValue.addListener(({ value }) => setDisplayValue(value));
     return () => animatedValue.removeListener(listener);
   }, [value]);
@@ -83,7 +84,7 @@ const LanguageToggle = () => {
   );
 };
 
-// Status Badge Component with Reason and translations
+// Status Badge Component
 const StatusBadge = ({ status, reason, reasonParams }: { status: 'green' | 'yellow' | 'red'; reason?: string | null; reasonParams?: string[] }) => {
   const { t } = useLanguage();
   const statusConfig = {
@@ -93,7 +94,6 @@ const StatusBadge = ({ status, reason, reasonParams }: { status: 'green' | 'yell
   };
   const config = statusConfig[status];
 
-  // Translate reason
   const translateReason = (reasonKey: string | null, params: string[] = []) => {
     if (!reasonKey) return null;
     const reasonMap: Record<string, string> = {
@@ -102,9 +102,7 @@ const StatusBadge = ({ status, reason, reasonParams }: { status: 'green' | 'yell
       'd14_below_target': t.d14BelowTarget,
     };
     let message = reasonMap[reasonKey] || reasonKey;
-    params.forEach((param, index) => {
-      message = message.replace(`{${index}}`, param);
-    });
+    params.forEach((param, index) => { message = message.replace(`{${index}}`, param); });
     return message;
   };
 
@@ -140,12 +138,73 @@ const TrendIndicator = ({ trend }: { trend: 'improving' | 'stable' | 'worsening'
   );
 };
 
+// Pagination Dots Component
+const PaginationDots = ({ total, current }: { total: number; current: number }) => (
+  <View style={styles.paginationContainer}>
+    {Array.from({ length: total }).map((_, index) => (
+      <View key={index} style={[styles.paginationDot, current === index && styles.paginationDotActive]} />
+    ))}
+  </View>
+);
+
+// Day Card Component (for swipeable Today section)
+const DayCard = ({ dayStats, dayLabel, isToday }: { dayStats: DailyStats; dayLabel: string; isToday: boolean }) => {
+  const { t } = useLanguage();
+  const formatCurrency = (value: number) => `€${value.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+  return (
+    <View style={[styles.dayCard, { width: CARD_WIDTH }]}>
+      <Text style={[styles.dayCardLabel, isToday && styles.dayCardLabelToday]}>{dayLabel}</Text>
+      
+      <View style={styles.dayCardGrid}>
+        <View style={styles.dayCardOccupancy}>
+          <Text style={styles.dayCardOccLabel}>{t.occupancy}</Text>
+          <Text style={styles.dayCardOccValue}>{dayStats.occupancy_percent.toFixed(0)}%</Text>
+          <Text style={styles.dayCardOccRooms}>{dayStats.rooms_occupied} / {dayStats.total_rooms} {t.rooms}</Text>
+        </View>
+        
+        <View style={styles.dayCardArrDep}>
+          <View style={styles.dayCardArrDepItem}>
+            <Ionicons name="log-in" size={16} color="#10B981" />
+            <Text style={styles.dayCardArrDepValue}>{dayStats.arrivals}</Text>
+            <Text style={styles.dayCardArrDepLabel}>{t.arrivals}</Text>
+          </View>
+          <View style={styles.dayCardDivider} />
+          <View style={styles.dayCardArrDepItem}>
+            <Ionicons name="log-out" size={16} color="#F59E0B" />
+            <Text style={styles.dayCardArrDepValue}>{dayStats.departures}</Text>
+            <Text style={styles.dayCardArrDepLabel}>{t.departures}</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.dayCardRevenue}>
+        <Text style={styles.dayCardRevTitle}>{t.dailyRevenue}</Text>
+        <View style={styles.dayCardRevGrid}>
+          <View style={styles.dayCardRevItem}>
+            <Ionicons name="bed" size={14} color="#60A5FA" />
+            <Text style={styles.dayCardRevValue}>{formatCurrency(dayStats.room_revenue)}</Text>
+          </View>
+          <View style={styles.dayCardRevItem}>
+            <Ionicons name="car" size={14} color="#A78BFA" />
+            <Text style={styles.dayCardRevValue}>{formatCurrency(dayStats.parking_revenue)}</Text>
+          </View>
+          <View style={styles.dayCardRevItem}>
+            <Ionicons name="cafe" size={14} color="#F472B6" />
+            <Text style={styles.dayCardRevValue}>{formatCurrency(dayStats.vending_revenue)}</Text>
+          </View>
+        </View>
+        <Text style={styles.dayCardTax}>{t.cityTax}: {formatCurrency(dayStats.city_tax)} ({t.separate})</Text>
+      </View>
+    </View>
+  );
+};
+
 // Radar Day Card Component
 const RadarDayCard = ({ day, index }: { day: any; index: number }) => {
   const { language } = useLanguage();
   const dayNames = getDayNames(language);
   const monthNames = getMonthNames(language);
-  
   const dayOfWeek = new Date(day.date).getDay();
   const monthIndex = new Date(day.date).getMonth();
   
@@ -188,17 +247,15 @@ const RadarDayCard = ({ day, index }: { day: any; index: number }) => {
   );
 };
 
-// Enhanced Alert Component with translations
+// Enhanced Alert Component
 const AlertItem = ({ alert }: { alert: any }) => {
   const { t } = useLanguage();
-  
   const getStatusColor = (status: string) => {
     if (status === 'ok') return '#10B981';
     if (status === 'warning') return '#F59E0B';
     return '#EF4444';
   };
 
-  // Translate alert message
   const translateMessage = (messageKey: string, params: string[] = []) => {
     const translationMap: Record<string, string> = {
       'occupancy_below_target': t.occupancyBelowTarget,
@@ -206,15 +263,11 @@ const AlertItem = ({ alert }: { alert: any }) => {
       'consecutive_low_days': t.consecutiveLowDays,
       'no_critical_issues': t.noCriticalIssues,
     };
-    
     let message = translationMap[messageKey] || messageKey;
-    params.forEach((param, index) => {
-      message = message.replace(`{${index}}`, param);
-    });
+    params.forEach((param, index) => { message = message.replace(`{${index}}`, param); });
     return message;
   };
 
-  // Translate context
   const translateContext = (contextKey: string) => {
     const contextMap: Record<string, string> = {
       'next_days_on_track': t.nextDaysOnTrack,
@@ -243,55 +296,68 @@ const AlertItem = ({ alert }: { alert: any }) => {
   );
 };
 
-// Simple Weekly Occupancy Chart Component - BIGGER VERSION
-const WeeklyOccupancyChart = ({ weekData }: { weekData: any[] }) => {
+// Weekly Chart Component
+const WeeklyChart = ({ weekData }: { weekData: any[] }) => {
   const { t, language } = useLanguage();
   const dayNames = getDayNames(language);
-  
-  const maxValue = 100;
-  const chartHeight = 120; // BIGGER
-
-  const getBarColor = (value: number) => {
-    if (value >= 70) return '#10B981';
-    if (value >= 50) return '#F59E0B';
-    return '#EF4444';
-  };
+  const chartHeight = 100;
+  const getBarColor = (value: number) => value >= 70 ? '#10B981' : value >= 50 ? '#F59E0B' : '#EF4444';
 
   if (!weekData || weekData.length === 0) return null;
 
   return (
-    <View style={styles.chartContainer}>
-      <Text style={styles.chartTitle}>{t.weeklyOccupancy}</Text>
-      <View style={styles.chartWrapper}>
-        {/* Y-axis labels */}
-        <View style={styles.yAxis}>
-          <Text style={styles.yAxisLabel}>100%</Text>
-          <Text style={styles.yAxisLabel}>50%</Text>
-          <Text style={styles.yAxisLabel}>0%</Text>
-        </View>
-        {/* Bars */}
-        <View style={styles.barsContainer}>
-          {weekData.map((day, index) => {
-            const barHeight = Math.max(4, (day.occupancy_percent / maxValue) * chartHeight);
-            return (
-              <View key={index} style={styles.barWrapper}>
-                <View style={[styles.barColumn, { height: chartHeight }]}>
-                  <View 
-                    style={[
-                      styles.bar, 
-                      { 
-                        height: barHeight, 
-                        backgroundColor: getBarColor(day.occupancy_percent) 
-                      }
-                    ]} 
-                  />
-                </View>
-                <Text style={styles.barLabel}>{dayNames[index]}</Text>
-                <Text style={styles.barValue}>{day.occupancy_percent.toFixed(0)}%</Text>
+    <View style={styles.chartCard}>
+      <Text style={styles.chartCardTitle}>{t.weeklyOccupancy}</Text>
+      <View style={styles.chartBarsRow}>
+        {weekData.map((day, index) => {
+          const barHeight = Math.max(4, (day.occupancy_percent / 100) * chartHeight);
+          return (
+            <View key={index} style={styles.chartBarWrapper}>
+              <View style={[styles.chartBarCol, { height: chartHeight }]}>
+                <View style={[styles.chartBar, { height: barHeight, backgroundColor: getBarColor(day.occupancy_percent) }]} />
               </View>
-            );
-          })}
-        </View>
+              <Text style={styles.chartBarLabel}>{dayNames[index]}</Text>
+              <Text style={styles.chartBarValue}>{day.occupancy_percent.toFixed(0)}%</Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+};
+
+// Monthly Chart Component
+const MonthlyChart = ({ monthData }: { monthData: any }) => {
+  const { t, language } = useLanguage();
+  const fullMonthNames = getFullMonthNames(language);
+  const chartHeight = 100;
+  
+  // Generate last 4 weeks data
+  const weeksData = [
+    { label: 'W1', value: monthData.week1 || Math.random() * 40 + 40 },
+    { label: 'W2', value: monthData.week2 || Math.random() * 40 + 40 },
+    { label: 'W3', value: monthData.week3 || Math.random() * 40 + 40 },
+    { label: 'W4', value: monthData.week4 || monthData.occupancy_accumulated || 50 },
+  ];
+
+  const getBarColor = (value: number) => value >= 70 ? '#10B981' : value >= 50 ? '#F59E0B' : '#EF4444';
+
+  return (
+    <View style={styles.chartCard}>
+      <Text style={styles.chartCardTitle}>{fullMonthNames[new Date().getMonth()]} {t.occupancy}</Text>
+      <View style={styles.chartBarsRow}>
+        {weeksData.map((week, index) => {
+          const barHeight = Math.max(4, (week.value / 100) * chartHeight);
+          return (
+            <View key={index} style={[styles.chartBarWrapper, { flex: 1 }]}>
+              <View style={[styles.chartBarCol, { height: chartHeight }]}>
+                <View style={[styles.chartBar, { height: barHeight, backgroundColor: getBarColor(week.value), width: 40 }]} />
+              </View>
+              <Text style={styles.chartBarLabel}>{week.label}</Text>
+              <Text style={styles.chartBarValue}>{week.value.toFixed(0)}%</Text>
+            </View>
+          );
+        })}
       </View>
     </View>
   );
@@ -302,51 +368,65 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [weekChartData, setWeekChartData] = useState<any[]>([]);
+  const [dayStatsArray, setDayStatsArray] = useState<DailyStats[]>([]);
+  const [currentDayIndex, setCurrentDayIndex] = useState(2); // Start at Today (index 2 = today)
+  const [currentChartIndex, setCurrentChartIndex] = useState(0);
+  const [reservations, setReservations] = useState<any[]>([]);
+  const [settings, setSettingsState] = useState(DEFAULT_SETTINGS);
   const router = useRouter();
   const { t, language } = useLanguage();
+  const dayScrollRef = useRef<ScrollView>(null);
+  const chartScrollRef = useRef<ScrollView>(null);
+
+  const dayLabels = [
+    language === 'en' ? 'Day before yesterday' : 'Eergisteren',
+    language === 'en' ? 'Yesterday' : 'Gisteren',
+    language === 'en' ? 'Today' : 'Vandaag',
+    language === 'en' ? 'Tomorrow' : 'Morgen',
+    language === 'en' ? 'Day after tomorrow' : 'Overmorgen',
+  ];
 
   const loadDashboard = useCallback(async () => {
     try {
-      // ALWAYS load fresh settings first
-      const settings = await loadSettings();
-      
-      // Force settings to have 26 rooms if not set
-      if (settings.total_rooms !== 26) {
-        settings.total_rooms = 26;
-        await saveSettings(settings);
+      const loadedSettings = await loadSettings();
+      if (loadedSettings.total_rooms !== 26) {
+        loadedSettings.total_rooms = 26;
+        await saveSettings(loadedSettings);
       }
+      setSettingsState(loadedSettings);
       
-      let reservations = await loadReservations();
+      let loadedReservations = await loadReservations();
       const lastUpdate = await getLastUpdate();
       
-      // If no reservations, generate demo data with correct settings
-      if (reservations.length === 0) {
-        reservations = generateDemoReservations(settings);
-        await saveReservations(reservations);
+      if (loadedReservations.length === 0) {
+        loadedReservations = generateDemoReservations(loadedSettings);
+        await saveReservations(loadedReservations);
       }
+      setReservations(loadedReservations);
       
-      // ALWAYS calculate fresh dashboard (don't use cache for data)
-      const dashboardData = calculateDashboard(reservations, settings, lastUpdate);
+      const dashboardData = calculateDashboard(loadedReservations, loadedSettings, lastUpdate);
       setData(dashboardData);
       
-      // Generate weekly chart data (Mon-Sun)
+      // Generate day stats for swipeable cards (2 days before, today, 2 days after)
       const today = new Date();
+      const dayStats: DailyStats[] = [];
+      for (let i = -2; i <= 2; i++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() + i);
+        dayStats.push(calculateDailyStats(date, loadedReservations, loadedSettings));
+      }
+      setDayStatsArray(dayStats);
+      
+      // Generate weekly chart data
       const dayOfWeek = today.getDay();
       const monday = new Date(today);
       monday.setDate(today.getDate() - ((dayOfWeek + 6) % 7));
-      
       const weekStats = [];
       for (let i = 0; i < 7; i++) {
         const date = new Date(monday);
         date.setDate(monday.getDate() + i);
-        const radar = dashboardData.radar.find(r => {
-          const rDate = new Date(r.date);
-          return rDate.toDateString() === date.toDateString();
-        });
-        weekStats.push({
-          date,
-          occupancy_percent: radar?.occupancy_percent || 0,
-        });
+        const radar = dashboardData.radar.find(r => new Date(r.date).toDateString() === date.toDateString());
+        weekStats.push({ date, occupancy_percent: radar?.occupancy_percent || 0 });
       }
       setWeekChartData(weekStats);
       
@@ -359,13 +439,28 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
+  
+  // Scroll to Today on mount
+  useEffect(() => {
+    setTimeout(() => {
+      dayScrollRef.current?.scrollTo({ x: 2 * CARD_WIDTH, animated: false });
+    }, 100);
+  }, [dayStatsArray]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadDashboard();
   }, [loadDashboard]);
 
-  const formatCurrency = (value: number) => `€${value.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const handleDayScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const index = Math.round(event.nativeEvent.contentOffset.x / CARD_WIDTH);
+    setCurrentDayIndex(index);
+  };
+
+  const handleChartScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const index = Math.round(event.nativeEvent.contentOffset.x / CARD_WIDTH);
+    setCurrentChartIndex(index);
+  };
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return t.never;
@@ -417,65 +512,32 @@ export default function Dashboard() {
         <Text style={styles.lastUpdate}>{t.lastUpdate}: {formatDate(data?.last_update || null)}</Text>
       </View>
 
-      {/* Scrollable Content */}
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#10B981" />}>
         
-        {/* Section 1: TODAY */}
+        {/* Section 1: SWIPEABLE DAY CARDS */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="today" size={20} color="#10B981" />
-            <Text style={styles.sectionTitle}>{t.today}</Text>
-            <Text style={styles.sectionSubtitle}>{t.operation}</Text>
+            <Ionicons name="calendar" size={20} color="#10B981" />
+            <Text style={styles.sectionTitle}>{t.operation.toUpperCase()}</Text>
+            <Text style={styles.sectionSubtitle}>← {language === 'en' ? 'swipe' : 'veeg'} →</Text>
           </View>
 
-          <View style={styles.cardGrid}>
-            <View style={styles.cardLarge}>
-              <Text style={styles.cardLabel}>{t.occupancy}</Text>
-              <AnimatedCounter value={data?.today.occupancy_percent || 0} suffix="%" style={styles.occupancyValue} />
-              <Text style={styles.cardSubtext}>{data?.today.rooms_occupied || 0} / {data?.today.total_rooms || 26} {t.rooms}</Text>
-            </View>
-            <View style={styles.cardMedium}>
-              <View style={styles.arrDepRow}>
-                <View style={styles.arrDepItem}>
-                  <Ionicons name="log-in" size={18} color="#10B981" />
-                  <Text style={styles.arrDepValue}>{data?.today.arrivals || 0}</Text>
-                  <Text style={styles.arrDepLabel}>{t.arrivals}</Text>
-                </View>
-                <View style={styles.arrDepDivider} />
-                <View style={styles.arrDepItem}>
-                  <Ionicons name="log-out" size={18} color="#F59E0B" />
-                  <Text style={styles.arrDepValue}>{data?.today.departures || 0}</Text>
-                  <Text style={styles.arrDepLabel}>{t.departures}</Text>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.revenueSection}>
-            <Text style={styles.revenueSectionTitle}>{t.dailyRevenue}</Text>
-            <View style={styles.revenueGrid}>
-              <View style={styles.revenueItem}>
-                <Ionicons name="bed" size={16} color="#60A5FA" />
-                <Text style={styles.revenueValue}>{formatCurrency(data?.today.room_revenue || 0)}</Text>
-                <Text style={styles.revenueLabel}>{t.rooms}</Text>
-              </View>
-              <View style={styles.revenueItem}>
-                <Ionicons name="car" size={16} color="#A78BFA" />
-                <Text style={styles.revenueValue}>{formatCurrency(data?.today.parking_revenue || 0)}</Text>
-                <Text style={styles.revenueLabel}>{t.parking}</Text>
-              </View>
-              <View style={styles.revenueItem}>
-                <Ionicons name="cafe" size={16} color="#F472B6" />
-                <Text style={styles.revenueValue}>{formatCurrency(data?.today.vending_revenue || 0)}</Text>
-                <Text style={styles.revenueLabel}>{t.vending}</Text>
-              </View>
-            </View>
-            <View style={styles.cityTaxContainer}>
-              <Ionicons name="document-text-outline" size={14} color="#6B7280" />
-              <Text style={styles.cityTaxText}>{t.cityTax}: {formatCurrency(data?.today.city_tax || 0)} ({t.separate})</Text>
-            </View>
-          </View>
+          <ScrollView
+            ref={dayScrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={handleDayScroll}
+            contentContainerStyle={styles.dayCardsContainer}
+            snapToInterval={CARD_WIDTH}
+            decelerationRate="fast"
+          >
+            {dayStatsArray.map((stats, index) => (
+              <DayCard key={index} dayStats={stats} dayLabel={dayLabels[index]} isToday={index === 2} />
+            ))}
+          </ScrollView>
+          <PaginationDots total={5} current={currentDayIndex} />
         </View>
 
         {/* Section 2: RADAR */}
@@ -503,16 +565,33 @@ export default function Dashboard() {
           </View>
         </View>
 
-        {/* Section 3: CONTROL */}
+        {/* Section 3: CONTROL with SWIPEABLE CHARTS */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="analytics" size={20} color="#60A5FA" />
             <Text style={styles.sectionTitle}>{t.control}</Text>
-            <Text style={styles.sectionSubtitle}>{t.weekAndMonth}</Text>
+            <Text style={styles.sectionSubtitle}>← {language === 'en' ? 'swipe' : 'veeg'} →</Text>
           </View>
 
-          {/* Weekly Occupancy Chart */}
-          {weekChartData.length > 0 && <WeeklyOccupancyChart weekData={weekChartData} />}
+          {/* Swipeable Charts */}
+          <ScrollView
+            ref={chartScrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={handleChartScroll}
+            contentContainerStyle={styles.chartsContainer}
+            snapToInterval={CARD_WIDTH}
+            decelerationRate="fast"
+          >
+            <View style={{ width: CARD_WIDTH }}>
+              <WeeklyChart weekData={weekChartData} />
+            </View>
+            <View style={{ width: CARD_WIDTH }}>
+              <MonthlyChart monthData={data?.month || {}} />
+            </View>
+          </ScrollView>
+          <PaginationDots total={2} current={currentChartIndex} />
 
           {/* Week Stats */}
           <View style={styles.controlCard}>
@@ -525,12 +604,12 @@ export default function Dashboard() {
             </View>
             <View style={styles.controlStatsRow}>
               <View style={styles.controlStat}>
-                <AnimatedCounter value={data?.week.occupancy_avg || 0} suffix="%" style={styles.controlStatValue} />
+                <Text style={styles.controlStatValue}>{(data?.week.occupancy_avg || 0).toFixed(0)}%</Text>
                 <Text style={styles.controlStatLabel}>{t.avgOccupancy}</Text>
               </View>
               <View style={styles.controlStatDivider} />
               <View style={styles.controlStat}>
-                <Text style={styles.controlStatValue}>{formatCurrency(data?.week.revenue_total || 0)}</Text>
+                <Text style={styles.controlStatValue}>€{(data?.week.revenue_total || 0).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</Text>
                 <Text style={styles.controlStatLabel}>{t.totalRevenue}</Text>
               </View>
               <View style={styles.controlStatDivider} />
@@ -549,12 +628,12 @@ export default function Dashboard() {
             </View>
             <View style={styles.controlStatsRow}>
               <View style={styles.controlStat}>
-                <AnimatedCounter value={data?.month.occupancy_accumulated || 0} suffix="%" style={styles.controlStatValue} />
+                <Text style={styles.controlStatValue}>{(data?.month.occupancy_accumulated || 0).toFixed(0)}%</Text>
                 <Text style={styles.controlStatLabel}>{t.accumulatedOccupancy}</Text>
               </View>
               <View style={styles.controlStatDivider} />
               <View style={styles.controlStat}>
-                <Text style={styles.controlStatValue}>{formatCurrency(data?.month.revenue_accumulated || 0)}</Text>
+                <Text style={styles.controlStatValue}>€{(data?.month.revenue_accumulated || 0).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}</Text>
                 <Text style={styles.controlStatLabel}>{t.accumulatedRevenue}</Text>
               </View>
             </View>
@@ -600,30 +679,40 @@ const styles = StyleSheet.create({
   lastUpdate: { fontSize: 11, color: '#6B7280', marginTop: 8 },
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: 40 },
-  section: { paddingHorizontal: 16, paddingVertical: 20, borderBottomWidth: 1, borderBottomColor: '#1F1F23' },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 8 },
+  section: { paddingVertical: 20, borderBottomWidth: 1, borderBottomColor: '#1F1F23' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, paddingHorizontal: 16, gap: 8 },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: '#FFFFFF', letterSpacing: 1 },
-  sectionSubtitle: { fontSize: 12, color: '#6B7280', marginLeft: 8 },
-  cardGrid: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  cardLarge: { flex: 1, backgroundColor: '#111113', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#1F1F23' },
-  cardMedium: { flex: 1, backgroundColor: '#111113', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#1F1F23', justifyContent: 'center' },
-  cardLabel: { fontSize: 12, color: '#6B7280', marginBottom: 8 },
-  occupancyValue: { fontSize: 42, fontWeight: '700', color: '#10B981', fontVariant: ['tabular-nums'] },
-  cardSubtext: { fontSize: 13, color: '#9CA3AF', marginTop: 4 },
-  arrDepRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
-  arrDepItem: { alignItems: 'center', flex: 1 },
-  arrDepDivider: { width: 1, height: 40, backgroundColor: '#1F1F23' },
-  arrDepValue: { fontSize: 28, fontWeight: '700', color: '#FFFFFF', marginTop: 4 },
-  arrDepLabel: { fontSize: 11, color: '#6B7280', marginTop: 2 },
-  revenueSection: { backgroundColor: '#111113', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#1F1F23' },
-  revenueSectionTitle: { fontSize: 12, color: '#6B7280', marginBottom: 12 },
-  revenueGrid: { flexDirection: 'row', justifyContent: 'space-between' },
-  revenueItem: { alignItems: 'center', flex: 1 },
-  revenueValue: { fontSize: 18, fontWeight: '700', color: '#FFFFFF', marginTop: 6 },
-  revenueLabel: { fontSize: 11, color: '#6B7280', marginTop: 2 },
-  cityTaxContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#1F1F23', gap: 6 },
-  cityTaxText: { fontSize: 12, color: '#6B7280' },
-  radarScroll: { paddingVertical: 4, gap: 10 },
+  sectionSubtitle: { fontSize: 12, color: '#6B7280', marginLeft: 'auto' },
+  
+  // Day Cards Carousel
+  dayCardsContainer: { paddingHorizontal: 16 },
+  dayCard: { backgroundColor: '#111113', borderRadius: 16, padding: 20, marginRight: 0, borderWidth: 1, borderColor: '#1F1F23' },
+  dayCardLabel: { fontSize: 16, fontWeight: '600', color: '#6B7280', marginBottom: 16, textAlign: 'center' },
+  dayCardLabelToday: { color: '#10B981' },
+  dayCardGrid: { flexDirection: 'row', marginBottom: 16 },
+  dayCardOccupancy: { flex: 1, alignItems: 'center', borderRightWidth: 1, borderRightColor: '#1F1F23', paddingRight: 16 },
+  dayCardOccLabel: { fontSize: 11, color: '#6B7280', marginBottom: 4 },
+  dayCardOccValue: { fontSize: 48, fontWeight: '700', color: '#10B981' },
+  dayCardOccRooms: { fontSize: 12, color: '#9CA3AF', marginTop: 4 },
+  dayCardArrDep: { flex: 1, flexDirection: 'row', paddingLeft: 16 },
+  dayCardArrDepItem: { flex: 1, alignItems: 'center' },
+  dayCardDivider: { width: 1, backgroundColor: '#1F1F23' },
+  dayCardArrDepValue: { fontSize: 28, fontWeight: '700', color: '#FFFFFF', marginTop: 4 },
+  dayCardArrDepLabel: { fontSize: 10, color: '#6B7280', marginTop: 2 },
+  dayCardRevenue: { backgroundColor: '#0A0A0B', borderRadius: 12, padding: 12, marginTop: 8 },
+  dayCardRevTitle: { fontSize: 11, color: '#6B7280', marginBottom: 10, textAlign: 'center' },
+  dayCardRevGrid: { flexDirection: 'row', justifyContent: 'space-around' },
+  dayCardRevItem: { alignItems: 'center' },
+  dayCardRevValue: { fontSize: 14, fontWeight: '600', color: '#FFFFFF', marginTop: 4 },
+  dayCardTax: { fontSize: 10, color: '#6B7280', textAlign: 'center', marginTop: 10 },
+  
+  // Pagination
+  paginationContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 12, gap: 6 },
+  paginationDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#374151' },
+  paginationDotActive: { backgroundColor: '#10B981', width: 20 },
+  
+  // Radar
+  radarScroll: { paddingHorizontal: 16, paddingVertical: 4, gap: 10 },
   radarCard: { backgroundColor: '#111113', borderRadius: 10, padding: 12, width: 100, borderWidth: 1, borderColor: '#1F1F23' },
   radarCardFirst: { backgroundColor: '#1A1A1D' },
   radarDateContainer: { alignItems: 'center', marginBottom: 10, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#1F1F23' },
@@ -640,7 +729,9 @@ const styles = StyleSheet.create({
   radarAdr: { alignItems: 'center' },
   radarAdrValue: { fontSize: 11, fontWeight: '600', color: '#60A5FA' },
   radarAdrLabel: { fontSize: 9, color: '#6B7280' },
-  alertsBox: { backgroundColor: '#111113', borderRadius: 12, padding: 16, marginTop: 16, borderWidth: 1, borderColor: '#1F1F23' },
+  
+  // Alerts
+  alertsBox: { backgroundColor: '#111113', borderRadius: 12, padding: 16, marginTop: 16, marginHorizontal: 16, borderWidth: 1, borderColor: '#1F1F23' },
   alertsHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
   alertsTitle: { fontSize: 13, fontWeight: '600', color: '#FFFFFF' },
   alertLegend: { flexDirection: 'row', gap: 16, marginBottom: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#1F1F23' },
@@ -654,18 +745,20 @@ const styles = StyleSheet.create({
   alertContent: { flex: 1 },
   alertText: { fontSize: 13, color: '#D1D5DB', lineHeight: 18 },
   alertContext: { fontSize: 11, color: '#6B7280', marginTop: 2, fontStyle: 'italic' },
-  chartContainer: { backgroundColor: '#111113', borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#1F1F23' },
-  chartTitle: { fontSize: 14, fontWeight: '600', color: '#FFFFFF', marginBottom: 16 },
-  chartWrapper: { flexDirection: 'row', alignItems: 'flex-end' },
-  yAxis: { width: 40, height: 120, justifyContent: 'space-between', marginRight: 12 },
-  yAxisLabel: { fontSize: 10, color: '#6B7280', textAlign: 'right' },
-  barsContainer: { flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end', height: 120 },
-  barWrapper: { alignItems: 'center', flex: 1 },
-  barColumn: { justifyContent: 'flex-end' },
-  bar: { width: 30, borderRadius: 6, minHeight: 6 },
-  barLabel: { fontSize: 10, color: '#9CA3AF', marginTop: 8, fontWeight: '600' },
-  barValue: { fontSize: 9, color: '#FFFFFF', marginTop: 4, fontWeight: '500' },
-  controlCard: { backgroundColor: '#111113', borderRadius: 12, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#1F1F23' },
+  
+  // Charts Carousel
+  chartsContainer: { paddingHorizontal: 16 },
+  chartCard: { backgroundColor: '#111113', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#1F1F23' },
+  chartCardTitle: { fontSize: 14, fontWeight: '600', color: '#FFFFFF', marginBottom: 16 },
+  chartBarsRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end' },
+  chartBarWrapper: { alignItems: 'center' },
+  chartBarCol: { justifyContent: 'flex-end' },
+  chartBar: { width: 28, borderRadius: 6, minHeight: 6 },
+  chartBarLabel: { fontSize: 10, color: '#9CA3AF', marginTop: 8, fontWeight: '600' },
+  chartBarValue: { fontSize: 9, color: '#FFFFFF', marginTop: 4 },
+  
+  // Control
+  controlCard: { backgroundColor: '#111113', borderRadius: 12, padding: 16, marginBottom: 12, marginHorizontal: 16, borderWidth: 1, borderColor: '#1F1F23' },
   controlCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   controlCardTitle: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
   trendBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -674,7 +767,7 @@ const styles = StyleSheet.create({
   controlStatsRow: { flexDirection: 'row', alignItems: 'center' },
   controlStat: { flex: 1, alignItems: 'center' },
   controlStatDivider: { width: 1, height: 30, backgroundColor: '#1F1F23' },
-  controlStatValue: { fontSize: 22, fontWeight: '700', color: '#FFFFFF' },
+  controlStatValue: { fontSize: 20, fontWeight: '700', color: '#FFFFFF' },
   controlStatLabel: { fontSize: 10, color: '#6B7280', marginTop: 4, textAlign: 'center' },
   projectionBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A1D', borderRadius: 8, padding: 12, marginTop: 12, gap: 8 },
   projectionText: { fontSize: 12, color: '#9CA3AF', flex: 1 },
