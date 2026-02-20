@@ -417,7 +417,7 @@ export function calculateDashboard(
   }));
   
   // Calculate status, rhythm, trend, alerts
-  const { status, reason } = calculateStatusWithReason(todayStats, radarStats, settings);
+  const { status, reason, reason_params } = calculateStatusWithReason(todayStats, radarStats, settings);
   const rhythm = calculateRhythm(weekRevenue, prevWeekRevenue);
   const trend = calculateTrend(currentWeekStats, prevWeekStats);
   const alerts = generateEnhancedAlerts(todayStats, radarStats, settings);
