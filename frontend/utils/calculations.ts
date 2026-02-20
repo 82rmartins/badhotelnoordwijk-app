@@ -425,6 +425,7 @@ export function calculateDashboard(
   return {
     status,
     status_reason: reason,
+    status_reason_params: reason_params,
     rhythm,
     trend,
     last_update: lastUpdate,
