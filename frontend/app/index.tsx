@@ -95,27 +95,43 @@ export default function ModeSelector() {
   const router = useRouter();
   const { language } = useLanguage();
 
-  const t = language === 'en' ? {
-    welcome: 'Welcome to',
-    hotelName: 'BadHotel Noordwijk',
-    selectMode: 'Select your access mode',
-    guestMode: 'Guest Mode',
-    guestDesc: 'Hotel information, amenities, nearby places & booking',
-    guestHighlight: 'Scan QR Code',
-    managerMode: 'Manager Mode',
-    managerDesc: 'Live operations dashboard, occupancy & revenue analytics',
-    managerHighlight: 'Login Required',
-  } : {
-    welcome: 'Welkom bij',
-    hotelName: 'BadHotel Noordwijk',
-    selectMode: 'Selecteer uw toegangsmodus',
-    guestMode: 'Gastmodus',
-    guestDesc: 'Hotel informatie, voorzieningen, nabije plekken & boeken',
-    guestHighlight: 'Scan QR Code',
-    managerMode: 'Manager Modus',
-    managerDesc: 'Live operaties dashboard, bezetting & omzet analyses',
-    managerHighlight: 'Login Vereist',
+  const translations: Record<string, any> = {
+    en: {
+      welcome: 'Welcome to',
+      hotelName: 'BadHotel Noordwijk',
+      selectMode: 'Select your access mode',
+      guestMode: 'Guest Mode',
+      guestDesc: 'Hotel information, amenities, nearby places & booking',
+      guestHighlight: 'Scan QR Code',
+      managerMode: 'Manager Mode',
+      managerDesc: 'Live operations dashboard, occupancy & revenue analytics',
+      managerHighlight: 'Login Required',
+    },
+    nl: {
+      welcome: 'Welkom bij',
+      hotelName: 'BadHotel Noordwijk',
+      selectMode: 'Selecteer uw toegangsmodus',
+      guestMode: 'Gastmodus',
+      guestDesc: 'Hotel informatie, voorzieningen, nabije plekken & boeken',
+      guestHighlight: 'Scan QR Code',
+      managerMode: 'Manager Modus',
+      managerDesc: 'Live operaties dashboard, bezetting & omzet analyses',
+      managerHighlight: 'Login Vereist',
+    },
+    de: {
+      welcome: 'Willkommen bei',
+      hotelName: 'BadHotel Noordwijk',
+      selectMode: 'Wählen Sie Ihren Zugang',
+      guestMode: 'Gastmodus',
+      guestDesc: 'Hotelinfo, Einrichtungen, Umgebung & Buchung',
+      guestHighlight: 'QR-Code scannen',
+      managerMode: 'Manager Modus',
+      managerDesc: 'Live-Dashboard, Belegung & Umsatzanalysen',
+      managerHighlight: 'Login erforderlich',
+    }
   };
+  
+  const t = translations[language] || translations.en;
 
   return (
     <SafeAreaView style={styles.container}>
