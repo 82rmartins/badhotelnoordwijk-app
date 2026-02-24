@@ -659,7 +659,7 @@ export default function Dashboard() {
           
           if (mewsDay) {
             dayStats.push({
-              date: dateStr,
+              date: d,
               occupancy_percent: mewsDay.occupancy,
               rooms_occupied: mewsDay.occupiedRooms,
               total_rooms: mewsDay.availableRooms || loadedSettings.total_rooms,
@@ -674,7 +674,7 @@ export default function Dashboard() {
           } else {
             // No data for this day
             dayStats.push({
-              date: dateStr,
+              date: d,
               occupancy_percent: 0,
               rooms_occupied: 0,
               total_rooms: loadedSettings.total_rooms,
