@@ -210,7 +210,7 @@ export async function saveMewsData(data: Partial<MewsReportStore>): Promise<void
   }
 }
 
-// NEW: Load Mews report data from CLOUD (MongoDB via backend API)
+// NEW: Load Mews report data from CLOUD (MongoDB via backend API) - CLOUD FIRST!
 export async function loadMewsData(): Promise<MewsReportStore> {
   const emptyData: MewsReportStore = { 
     lastUpdate: '', 
@@ -222,36 +222,53 @@ export async function loadMewsData(): Promise<MewsReportStore> {
   };
   
   try {
-    // Try to load from backend (cloud storage) first
-    try {
-      const response = await fetch(`${API_URL}/api/mews-data`);
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Mews data loaded from cloud:', { 
-          daily: data.daily?.length || 0, 
-          weekly: data.weekly?.length || 0, 
-          monthly: data.monthly?.length || 0 
-        });
-        
-        // Ensure all fields exist
-        return {
-          lastUpdate: data.lastUpdate || '',
-          daily: data.daily || [],
-          weekly: data.weekly || [],
-          monthly: data.monthly || [],
-          arrivals: data.arrivals || [],
-          departures: data.departures || [],
-        };
-      }
-    } catch (apiError) {
-      console.warn('API not available, loading from local storage:', apiError);
-    }
+    // ALWAYS try cloud first - this ensures all devices see the same data
+    const response = await fetch(`${API_URL}/api/mews-data`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
     
-    // Fallback to local storage
+    if (response.ok) {
+      const data = await response.json();
+      console.log('Mews data loaded from CLOUD:', { 
+        daily: data.daily?.length || 0, 
+        weekly: data.weekly?.length || 0, 
+        monthly: data.monthly?.length || 0,
+        arrivals: data.arrivals?.length || 0,
+        departures: data.departures?.length || 0,
+      });
+      
+      // Also update local storage as cache
+      const result = {
+        lastUpdate: data.lastUpdate || '',
+        daily: data.daily || [],
+        weekly: data.weekly || [],
+        monthly: data.monthly || [],
+        arrivals: data.arrivals || [],
+        departures: data.departures || [],
+      };
+      
+      // Save to local as backup
+      try {
+        await AsyncStorage.setItem(STORAGE_KEYS.MEWS_DATA, JSON.stringify(result));
+      } catch (e) {
+        // Ignore local storage errors
+      }
+      
+      return result;
+    } else {
+      console.warn('Cloud API returned error:', response.status);
+    }
+  } catch (apiError) {
+    console.warn('Cloud API not available:', apiError);
+  }
+  
+  // Only fallback to local if cloud fails
+  try {
     const data = await AsyncStorage.getItem(STORAGE_KEYS.MEWS_DATA);
     if (data) {
       const parsed = JSON.parse(data);
-      console.log('Mews data loaded from local:', { 
+      console.log('Mews data loaded from LOCAL (fallback):', { 
         daily: parsed.daily?.length || 0, 
         weekly: parsed.weekly?.length || 0, 
         monthly: parsed.monthly?.length || 0 
@@ -265,11 +282,11 @@ export async function loadMewsData(): Promise<MewsReportStore> {
         departures: parsed.departures || [],
       };
     }
-    return emptyData;
-  } catch (error) {
-    console.error('Error loading Mews data:', error);
-    return emptyData;
+  } catch (localError) {
+    console.error('Local storage error:', localError);
   }
+  
+  return emptyData;
 }
 
 // NEW: Get today's data from Mews store
