@@ -218,52 +218,6 @@ function buildDashboardFromMews(mewsData: MewsReportStore, settings: HotelSettin
     },
   };
 }
-      message: 'critical_days_ahead',
-      message_params: [lowDays.length.toString()],
-      today_status: todayOcc >= target * 0.9 ? 'ok' : todayOcc >= target * 0.7 ? 'warning' : 'critical',
-      future_status: 'warning',
-      context: 'requires_attention',
-    });
-  } else {
-    alerts.push({
-      message: 'no_critical_issues',
-      message_params: [],
-      today_status: 'ok',
-      future_status: 'ok',
-      context: 'next_days_on_track',
-    });
-  }
-  
-  const avgMonthOcc = monthDays > 0 ? monthOccTotal / monthDays : 0;
-  
-  return {
-    status,
-    status_reason: statusReason,
-    status_reason_params: statusReasonParams,
-    rhythm: 'stable',
-    trend: 'stable',
-    last_update: lastUpdate,
-    today: todayData,
-    radar,
-    alerts,
-    week: {
-      start: weekStart,
-      end: weekEnd,
-      occupancy_avg: weekDays > 0 ? weekOccTotal / weekDays : 0,
-      revenue_total: weekRevTotal,
-      adr_avg: weekDays > 0 ? weekAdrTotal / weekDays : 0,
-      trend: 'stable',
-    },
-    month: {
-      name: monthNames[today.getMonth()],
-      occupancy_accumulated: avgMonthOcc,
-      revenue_accumulated: monthRevTotal,
-      projected_occupancy: avgMonthOcc,
-      days_elapsed: today.getDate(),
-      days_total: monthEnd.getDate(),
-    },
-  };
-}
 
 // Hotel Logo Component
 const HotelLogo = ({ size = 40 }: { size?: number }) => (
