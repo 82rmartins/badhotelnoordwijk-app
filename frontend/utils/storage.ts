@@ -152,11 +152,19 @@ export async function saveMewsData(data: Partial<MewsReportStore>): Promise<void
       daily: data.daily !== undefined ? data.daily : [],
       weekly: data.weekly !== undefined ? data.weekly : [],
       monthly: data.monthly !== undefined ? data.monthly : [],
+      arrivals: data.arrivals !== undefined ? data.arrivals : [],
+      departures: data.departures !== undefined ? data.departures : [],
     };
     
     await AsyncStorage.setItem(STORAGE_KEYS.MEWS_DATA, JSON.stringify(updated));
     await AsyncStorage.setItem(STORAGE_KEYS.LAST_UPDATE, new Date().toISOString());
-    console.log('Mews data saved:', { daily: updated.daily.length, weekly: updated.weekly.length, monthly: updated.monthly.length });
+    console.log('Mews data saved:', { 
+      daily: updated.daily.length, 
+      weekly: updated.weekly.length, 
+      monthly: updated.monthly.length,
+      arrivals: updated.arrivals.length,
+      departures: updated.departures.length,
+    });
   } catch (error) {
     console.error('Error saving Mews data:', error);
     throw error;
