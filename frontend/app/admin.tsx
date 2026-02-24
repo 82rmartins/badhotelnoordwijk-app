@@ -83,10 +83,25 @@ export default function AdminScreen() {
     const dailyData: MewsDailyData[] = [];
     const weeklyData: MewsDailyData[] = [];
     const monthlyData: MewsDailyData[] = [];
+    let arrivalsData: { date: string; count: number }[] = [];
+    let departuresData: { date: string; count: number }[] = [];
 
     for (const { content, fileName } of filesData) {
       try {
-        const { data, reportType, errors } = parseXLSX(content, settings.total_rooms);
+        const parseResult = parseXLSX(content, settings.total_rooms);
+        const { data, reportType, errors } = parseResult;
+
+        // Handle Arrivals and Departures reports
+        if (reportType === 'arrivals') {
+          arrivalsData = parseResult.arrivalsData || [];
+          results.push(`✓ ${fileName} (Arrivals): ${arrivalsData.length} days`);
+          continue;
+        }
+        if (reportType === 'departures') {
+          departuresData = parseResult.departuresData || [];
+          results.push(`✓ ${fileName} (Departures): ${departuresData.length} days`);
+          continue;
+        }
 
         if (data.length === 0) {
           results.push(`✗ ${fileName}: ${errors.length > 0 ? errors[0] : 'No data found'}`);
@@ -115,14 +130,30 @@ export default function AdminScreen() {
       }
     }
 
+    // Merge arrivals/departures into daily data
+    for (const d of dailyData) {
+      const arrivalEntry = arrivalsData.find(a => a.date === d.date);
+      const departureEntry = departuresData.find(dp => dp.date === d.date);
+      if (arrivalEntry) d.arrivals = arrivalEntry.count;
+      if (departureEntry) d.departures = departureEntry.count;
+    }
+
     // Save all collected data (REPLACES existing)
     await saveMewsData({
       daily: dailyData,
       weekly: weeklyData,
       monthly: monthlyData,
+      arrivals: arrivalsData,
+      departures: departuresData,
     });
 
-    console.log('Saved Mews data:', { daily: dailyData.length, weekly: weeklyData.length, monthly: monthlyData.length });
+    console.log('Saved Mews data:', { 
+      daily: dailyData.length, 
+      weekly: weeklyData.length, 
+      monthly: monthlyData.length,
+      arrivals: arrivalsData.length,
+      departures: departuresData.length,
+    });
 
     return results;
   };
