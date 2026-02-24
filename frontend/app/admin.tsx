@@ -62,6 +62,7 @@ export default function AdminScreen() {
 
   const pickAndUploadFile = useCallback(async () => {
     try {
+      console.log('Starting file picker...');
       const result = await DocumentPicker.getDocumentAsync({
         type: ['text/csv', 'text/comma-separated-values', 'application/csv', 
                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -69,9 +70,15 @@ export default function AdminScreen() {
         copyToCacheDirectory: true,
       });
 
-      if (result.canceled) return;
+      console.log('Picker result:', JSON.stringify(result));
+
+      if (result.canceled) {
+        console.log('User cancelled file selection');
+        return;
+      }
 
       const file = result.assets[0];
+      console.log('File selected:', file.name, file.uri);
       const fileName = file.name.toLowerCase();
       const isXLSX = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
       
