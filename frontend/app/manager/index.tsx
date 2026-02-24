@@ -740,10 +740,10 @@ export default function Dashboard() {
           d.setDate(today.getDate() + i);
           const dateStr = d.toISOString().split('T')[0];
           
-          // Find matching day in ANY data source
-          let mewsDay = allData.find(m => m.date === dateStr);
+          // First try to find in DAILY data (has arrivals/departures)
+          let mewsDay = mewsData.daily.find(m => m.date === dateStr);
           
-          // If no exact match, try weekly data by day of week
+          // If no exact match in daily, try weekly data by day of week
           if (!mewsDay && mewsData.weekly.length > 0) {
             mewsDay = mewsData.weekly.find(w => {
               const wDate = new Date(w.date);
@@ -751,14 +751,18 @@ export default function Dashboard() {
             });
           }
           
+          // Get arrivals/departures directly from mewsData
+          const arrivals = mewsData.arrivals?.find(a => a.date === dateStr)?.count || mewsDay?.arrivals || 0;
+          const departures = mewsData.departures?.find(dp => dp.date === dateStr)?.count || mewsDay?.departures || 0;
+          
           // Use data if found, otherwise use averages
           dayStats.push({
             date: d,
             occupancy_percent: mewsDay?.occupancy || avgOcc,
             rooms_occupied: mewsDay?.occupiedRooms || Math.round((avgOcc / 100) * loadedSettings.total_rooms),
-            total_rooms: mewsDay?.availableRooms || loadedSettings.total_rooms,
-            arrivals: mewsDay?.arrivals || 0,
-            departures: mewsDay?.departures || 0,
+            total_rooms: 24, // Always 24 rooms
+            arrivals: arrivals,
+            departures: departures,
             room_revenue: mewsDay?.revenue || avgRev,
             parking_revenue: 0,
             vending_revenue: 0,
