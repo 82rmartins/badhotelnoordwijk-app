@@ -18,7 +18,7 @@ import { useLanguage } from '../../utils/LanguageContext';
 type CategoryType = 'all' | 'breakfast' | 'restaurants' | 'supermarkets' | 'culture' | 'wellness';
 
 // Place Card
-const PlaceCard = ({ name, category, lat, lng }: { name: string; category: string; lat: number; lng: number }) => {
+const PlaceCard = ({ name, category, address }: { name: string; category: string; address: string }) => {
   const getCategoryIcon = (cat: string) => {
     const icons: Record<string, string> = {
       'breakfast': 'cafe',
@@ -50,8 +50,9 @@ const PlaceCard = ({ name, category, lat, lng }: { name: string; category: strin
   };
 
   const openInMaps = () => {
-    // For web and all platforms, use Google Maps universal URL
-    const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    // Use the full address for Google Maps search - more accurate
+    const query = encodeURIComponent(`${name}, ${address}`);
+    const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${query}`;
     Linking.openURL(googleMapsUrl);
   };
 
@@ -64,7 +65,7 @@ const PlaceCard = ({ name, category, lat, lng }: { name: string; category: strin
       </View>
       <View style={styles.placeInfo}>
         <Text style={styles.placeName}>{name}</Text>
-        <Text style={styles.placeCategory}>{category.replace('_', ' ')}</Text>
+        <Text style={styles.placeAddress} numberOfLines={1}>{address}</Text>
       </View>
       <View style={styles.placeAction}>
         <Ionicons name="navigate" size={20} color="#10B981" />
