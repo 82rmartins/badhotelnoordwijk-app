@@ -733,7 +733,7 @@ export default function Dashboard() {
           adr: 0,
         }));
         setWeekChartData(Array(7).fill({ occupancy_percent: 0 }));
-        setReservations([]);
+        setMewsDataState({ lastUpdate: '', daily: [], weekly: [], monthly: [] });
       }
       
     } catch (err) {
