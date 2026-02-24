@@ -196,11 +196,11 @@ function buildDashboardFromMews(mewsData: MewsReportStore, settings: HotelSettin
   if (displayOcc < target * 0.7) {
     status = 'red';
     statusReason = 'today_occupancy_below';
-    statusReasonParams.push(`${Math.round(target * 0.7)}%`);
+    statusReasonParams.push(`${Math.round(displayOcc)}`);
   } else if (displayOcc < target * 0.9) {
     status = 'yellow';
     statusReason = 'today_occupancy_below';
-    statusReasonParams.push(`${Math.round(target * 0.9)}%`);
+    statusReasonParams.push(`${Math.round(displayOcc)}`);
   }
   
   // Build alerts
