@@ -701,14 +701,23 @@ export default function Dashboard() {
         
       } else {
         // No Mews data - show empty state with message
+        const today = new Date();
+        const weekStart = new Date(today);
+        weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        
         const emptyData: DashboardData = {
           status: 'yellow',
           status_reason: null,
           status_reason_params: [],
+          rhythm: 'stable',
           trend: 'stable',
           last_update: lastUpdate,
           today: {
-            date: new Date().toISOString().split('T')[0],
+            date: today,
             occupancy_percent: 0,
             rooms_occupied: 0,
             total_rooms: loadedSettings.total_rooms,
@@ -722,19 +731,32 @@ export default function Dashboard() {
           },
           radar: [],
           alerts: [{
-            type: 'info',
             message: 'no_data_uploaded',
             message_params: [],
             today_status: 'warning',
             future_status: 'warning',
             context: 'upload_xlsx_files',
           }],
-          week: { occupancy_avg: 0, revenue_total: 0, adr_avg: 0 },
-          month: { occupancy_accumulated: 0, revenue_accumulated: 0, days_passed: new Date().getDate(), days_total: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() },
+          week: { 
+            start: weekStart, 
+            end: weekEnd, 
+            occupancy_avg: 0, 
+            revenue_total: 0, 
+            adr_avg: 0,
+            trend: 'stable',
+          },
+          month: { 
+            name: monthNames[today.getMonth()],
+            occupancy_accumulated: 0, 
+            revenue_accumulated: 0, 
+            projected_occupancy: 0,
+            days_elapsed: today.getDate(), 
+            days_total: monthEnd.getDate() 
+          },
         };
         setData(emptyData);
         setDayStatsArray(Array(5).fill({
-          date: new Date().toISOString().split('T')[0],
+          date: today,
           occupancy_percent: 0,
           rooms_occupied: 0,
           total_rooms: loadedSettings.total_rooms,
