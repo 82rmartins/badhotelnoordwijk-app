@@ -682,8 +682,8 @@ export default function Dashboard() {
         }));
         setWeekChartData(weekStats.length > 0 ? weekStats : Array(7).fill({ occupancy_percent: 0 }));
         
-        // Store mews daily data for week/month cards (used instead of reservations)
-        setReservations([]); // Clear old reservations
+        // Store mews data for week/month cards
+        setMewsDataState(mewsData);
         
       } else {
         // No Mews data - show empty state with message
