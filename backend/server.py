@@ -706,6 +706,92 @@ async def seed_demo_data():
         logger.error(f"Error seeding demo data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ============== MEWS DATA ENDPOINTS (Cloud Storage) ==============
+
+class MewsDailyData(BaseModel):
+    date: str
+    occupancy: float
+    occupiedRooms: int
+    availableRooms: int
+    revenue: float
+    adr: float
+    arrivals: int = 0
+    departures: int = 0
+    customers: int = 0
+
+class ArrivalDepartureData(BaseModel):
+    date: str
+    count: int
+
+class MewsReportStore(BaseModel):
+    lastUpdate: str
+    daily: List[MewsDailyData] = []
+    weekly: List[MewsDailyData] = []
+    monthly: List[MewsDailyData] = []
+    arrivals: List[ArrivalDepartureData] = []
+    departures: List[ArrivalDepartureData] = []
+
+@api_router.get("/mews-data")
+async def get_mews_data():
+    """Get Mews report data from cloud storage"""
+    try:
+        data = await db.mews_data.find_one({"_id": "mews_report"})
+        if data:
+            del data["_id"]
+            return data
+        return {
+            "lastUpdate": "",
+            "daily": [],
+            "weekly": [],
+            "monthly": [],
+            "arrivals": [],
+            "departures": []
+        }
+    except Exception as e:
+        logger.error(f"Error loading Mews data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/mews-data")
+async def save_mews_data(data: MewsReportStore):
+    """Save Mews report data to cloud storage (REPLACES existing)"""
+    try:
+        data_dict = data.dict()
+        data_dict["_id"] = "mews_report"
+        
+        await db.mews_data.replace_one(
+            {"_id": "mews_report"},
+            data_dict,
+            upsert=True
+        )
+        
+        logger.info(f"Mews data saved: daily={len(data.daily)}, weekly={len(data.weekly)}, monthly={len(data.monthly)}")
+        
+        return {
+            "success": True,
+            "message": "Dados salvos com sucesso",
+            "counts": {
+                "daily": len(data.daily),
+                "weekly": len(data.weekly),
+                "monthly": len(data.monthly),
+                "arrivals": len(data.arrivals),
+                "departures": len(data.departures)
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error saving Mews data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.delete("/mews-data")
+async def clear_mews_data():
+    """Clear all Mews report data"""
+    try:
+        await db.mews_data.delete_one({"_id": "mews_report"})
+        logger.info("Mews data cleared")
+        return {"success": True, "message": "Dados limpos com sucesso"}
+    except Exception as e:
+        logger.error(f"Error clearing Mews data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Include the router in the main app
 app.include_router(api_router)
 
