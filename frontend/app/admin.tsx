@@ -246,7 +246,7 @@ export default function AdminScreen() {
             try {
               console.log('Trying FileSystem base64 method...');
               const base64Content = await FileSystem.readAsStringAsync(file.uri, { 
-                encoding: FileSystem.EncodingType.Base64 
+                encoding: 'base64' as any
               });
               console.log('FileSystem succeeded, length:', base64Content.length);
               content = base64Content; // Keep as base64 string
