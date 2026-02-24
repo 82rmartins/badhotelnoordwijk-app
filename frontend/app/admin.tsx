@@ -169,6 +169,7 @@ export default function AdminScreen() {
                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                'application/vnd.ms-excel', '*/*'],
         copyToCacheDirectory: true,
+        multiple: true, // Allow multiple files on supported platforms
       });
 
       console.log('Picker result:', JSON.stringify(result));
@@ -178,24 +179,109 @@ export default function AdminScreen() {
         return;
       }
 
-      const file = result.assets[0];
-      console.log('File selected:', file.name, file.uri);
-      const fileName = file.name.toLowerCase();
-      const isXLSX = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
-      
       setUploading(true);
       setLastResult(null);
 
-      if (isXLSX) {
-        // Handle XLSX file
-        let content: string;
-        try {
-          content = await FileSystem.readAsStringAsync(file.uri, { encoding: FileSystem.EncodingType.Base64 });
-        } catch (readError) {
-          throw new Error(language === 'en' ? 'Could not read Excel file.' : language === 'nl' ? 'Kon Excel bestand niet lezen.' : 'Excel-Datei konnte nicht gelesen werden.');
-        }
+      const results: string[] = [];
+      let totalSuccess = 0;
 
-        const { reservations, data, reportType, errors } = parseXLSX(content, settings.total_rooms);
+      for (const file of result.assets) {
+        console.log('Processing file:', file.name, file.uri);
+        const fileName = file.name.toLowerCase();
+        const isXLSX = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+
+        try {
+          let processResult = '';
+
+          if (isXLSX) {
+            // Try multiple methods to read the XLSX file
+            let content: ArrayBuffer | null = null;
+            
+            // Method 1: Try using fetch (works on most platforms)
+            try {
+              console.log('Trying fetch method...');
+              const response = await fetch(file.uri);
+              content = await response.arrayBuffer();
+              console.log('Fetch succeeded, size:', content.byteLength);
+            } catch (fetchError) {
+              console.log('Fetch failed:', fetchError);
+            }
+
+            // Method 2: Try FileSystem as base64 then convert
+            if (!content) {
+              try {
+                console.log('Trying FileSystem base64 method...');
+                const base64Content = await FileSystem.readAsStringAsync(file.uri, { 
+                  encoding: FileSystem.EncodingType.Base64 
+                });
+                console.log('FileSystem succeeded, length:', base64Content.length);
+                // Keep as base64 string for the parser
+                const { reservations, data, reportType, errors } = parseXLSX(base64Content, settings.total_rooms);
+                
+                if (data.length > 0) {
+                  const existingReservations = await loadReservations();
+                  await saveReservations([...existingReservations, ...reservations]);
+                  processResult = `✓ ${file.name} (${reportType}): ${data.length} periods imported`;
+                  totalSuccess++;
+                } else {
+                  processResult = `✗ ${file.name}: ${errors.length > 0 ? errors[0] : 'No data found'}`;
+                }
+                results.push(processResult);
+                continue;
+              } catch (fsError) {
+                console.log('FileSystem failed:', fsError);
+              }
+            }
+
+            // Process with ArrayBuffer if we got it from fetch
+            if (content) {
+              const { reservations, data, reportType, errors } = parseXLSX(content, settings.total_rooms);
+              
+              if (data.length > 0) {
+                const existingReservations = await loadReservations();
+                await saveReservations([...existingReservations, ...reservations]);
+                processResult = `✓ ${file.name} (${reportType}): ${data.length} periods imported`;
+                totalSuccess++;
+              } else {
+                processResult = `✗ ${file.name}: ${errors.length > 0 ? errors[0] : 'No data found'}`;
+              }
+            } else {
+              processResult = `✗ ${file.name}: Could not read file`;
+            }
+          } else {
+            // CSV file
+            try {
+              const csvContent = await FileSystem.readAsStringAsync(file.uri);
+              const { reservations, errors } = parseCSV(csvContent);
+              
+              if (reservations.length > 0) {
+                const existingReservations = await loadReservations();
+                await saveReservations([...existingReservations, ...reservations]);
+                processResult = `✓ ${file.name}: ${reservations.length} reservations imported`;
+                totalSuccess++;
+              } else {
+                processResult = `✗ ${file.name}: No valid data found`;
+              }
+            } catch (csvError) {
+              processResult = `✗ ${file.name}: Could not read file`;
+            }
+          }
+
+          results.push(processResult);
+        } catch (fileError: any) {
+          results.push(`✗ ${file.name}: ${fileError.message}`);
+        }
+      }
+
+      await loadCurrentData();
+
+      const summary = `${totalSuccess}/${result.assets.length} ${language === 'en' ? 'files imported' : language === 'nl' ? 'bestanden geïmporteerd' : 'Dateien importiert'}\n\n${results.join('\n')}`;
+      setLastResult(summary);
+      
+      Alert.alert(
+        totalSuccess > 0 ? (language === 'en' ? 'Import Complete' : language === 'nl' ? 'Import Voltooid' : 'Import Abgeschlossen') : (language === 'en' ? 'Import Failed' : language === 'nl' ? 'Import Mislukt' : 'Import Fehlgeschlagen'),
+        summary
+      );
 
         if (reservations.length === 0 && data.length === 0) {
           throw new Error(language === 'en' ? 'No valid data found in Excel file.' : language === 'nl' ? 'Geen geldige data gevonden in Excel bestand.' : 'Keine gültigen Daten in Excel-Datei gefunden.');
