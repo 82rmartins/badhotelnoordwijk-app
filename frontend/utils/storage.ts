@@ -146,10 +146,10 @@ export async function clearAllData(): Promise<void> {
   }
 }
 
-// NEW: Save Mews report data directly (REPLACES existing data)
+// NEW: Save Mews report data to CLOUD (MongoDB via backend API)
 export async function saveMewsData(data: Partial<MewsReportStore>): Promise<void> {
   try {
-    // REPLACE all data - don't merge with existing
+    // Prepare data
     const updated: MewsReportStore = {
       lastUpdate: new Date().toISOString(),
       daily: data.daily !== undefined ? data.daily : [],
@@ -159,14 +159,41 @@ export async function saveMewsData(data: Partial<MewsReportStore>): Promise<void
       departures: data.departures !== undefined ? data.departures : [],
     };
     
+    // Save to backend (cloud storage)
+    try {
+      const response = await fetch(`${API_URL}/api/mews-data`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+      
+      if (response.ok) {
+        console.log('Mews data saved to cloud:', { 
+          daily: updated.daily.length, 
+          weekly: updated.weekly.length, 
+          monthly: updated.monthly.length,
+          arrivals: updated.arrivals.length,
+          departures: updated.departures.length,
+        });
+        
+        // Also save locally as backup
+        await AsyncStorage.setItem(STORAGE_KEYS.MEWS_DATA, JSON.stringify(updated));
+        await AsyncStorage.setItem(STORAGE_KEYS.LAST_UPDATE, new Date().toISOString());
+        return;
+      } else {
+        console.warn('Cloud save failed, falling back to local:', await response.text());
+      }
+    } catch (apiError) {
+      console.warn('API not available, saving locally:', apiError);
+    }
+    
+    // Fallback to local storage
     await AsyncStorage.setItem(STORAGE_KEYS.MEWS_DATA, JSON.stringify(updated));
     await AsyncStorage.setItem(STORAGE_KEYS.LAST_UPDATE, new Date().toISOString());
-    console.log('Mews data saved:', { 
+    console.log('Mews data saved locally:', { 
       daily: updated.daily.length, 
       weekly: updated.weekly.length, 
       monthly: updated.monthly.length,
-      arrivals: updated.arrivals.length,
-      departures: updated.departures.length,
     });
   } catch (error) {
     console.error('Error saving Mews data:', error);
