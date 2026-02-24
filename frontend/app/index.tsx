@@ -31,7 +31,7 @@ const logoStyles = StyleSheet.create({
   wave: { position: 'absolute', top: -8, left: 0, right: 0, height: 16, backgroundColor: '#8FAFC4', borderBottomLeftRadius: 100, borderBottomRightRadius: 100, transform: [{ scaleX: 1.5 }] },
 });
 
-// Language Toggle
+// Language Toggle - 3 languages
 const LanguageToggle = () => {
   const { language, setLanguage } = useLanguage();
   return (
@@ -47,6 +47,12 @@ const LanguageToggle = () => {
         onPress={() => setLanguage('nl')}
       >
         <Text style={[styles.langBtnText, language === 'nl' && styles.langBtnTextActive]}>NL</Text>
+      </TouchableOpacity>
+      <TouchableOpacity 
+        style={[styles.langBtn, language === 'de' && styles.langBtnActive]} 
+        onPress={() => setLanguage('de')}
+      >
+        <Text style={[styles.langBtnText, language === 'de' && styles.langBtnTextActive]}>DE</Text>
       </TouchableOpacity>
     </View>
   );
