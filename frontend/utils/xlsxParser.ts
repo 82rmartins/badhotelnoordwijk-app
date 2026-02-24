@@ -1,18 +1,17 @@
 // XLSX Parser for Mews Manager Reports
-// Supports daily, weekly, and monthly reports
+// Supports daily, weekly, and monthly reports from Mews PMS
 
 import * as XLSX from 'xlsx';
 import { Reservation } from './storage';
 
 export interface MewsReportData {
-  date: Date;
+  period: string;
   occupancy: number;
   occupiedRooms: number;
+  available: number;
   revenue: number;
   adr: number;
-  arrivals?: number;
-  departures?: number;
-  customers?: number;
+  customers: number;
 }
 
 export interface ParsedXLSXResult {
@@ -22,7 +21,7 @@ export interface ParsedXLSXResult {
   errors: string[];
 }
 
-// Parse XLSX file content (base64 or array buffer)
+// Parse Mews Manager Report XLSX
 export function parseXLSX(content: string | ArrayBuffer, totalRooms: number = 24): ParsedXLSXResult {
   const errors: string[] = [];
   const data: MewsReportData[] = [];
@@ -31,154 +30,134 @@ export function parseXLSX(content: string | ArrayBuffer, totalRooms: number = 24
 
   try {
     // Read workbook
-    const workbook = XLSX.read(content, { type: typeof content === 'string' ? 'base64' : 'array' });
-    
-    // Get first sheet
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    
-    // Convert to JSON
-    const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
-    
-    if (jsonData.length < 2) {
-      errors.push('File has no data rows');
+    let workbook;
+    try {
+      workbook = XLSX.read(content, { 
+        type: typeof content === 'string' ? 'base64' : 'array',
+        cellDates: true,
+        cellNF: true,
+      });
+    } catch (readError: any) {
+      errors.push(`Could not parse Excel file: ${readError.message}`);
       return { data, reservations, reportType, errors };
     }
 
-    // Find headers row (usually first row with "Date" or "Period" or similar)
-    let headerRowIndex = 0;
-    let headers: string[] = [];
-    
-    for (let i = 0; i < Math.min(5, jsonData.length); i++) {
-      const row = jsonData[i];
-      if (row && Array.isArray(row)) {
-        const rowStr = row.map(c => String(c || '').toLowerCase()).join('|');
-        if (rowStr.includes('date') || rowStr.includes('period') || rowStr.includes('day') || 
-            rowStr.includes('occupancy') || rowStr.includes('revenue') || rowStr.includes('bezetting')) {
-          headerRowIndex = i;
-          headers = row.map(c => String(c || '').toLowerCase().trim());
+    // Check for Mews structure (should have Parameters and Data sheets)
+    if (!workbook.SheetNames.includes('Data')) {
+      errors.push('Invalid Mews report: Missing "Data" sheet');
+      return { data, reservations, reportType, errors };
+    }
+
+    // Read Parameters to detect report type
+    if (workbook.SheetNames.includes('Parameters')) {
+      const paramsSheet = workbook.Sheets['Parameters'];
+      const paramsData = XLSX.utils.sheet_to_json(paramsSheet, { header: 1 }) as any[][];
+      
+      for (const row of paramsData) {
+        if (row[0] === 'Mode') {
+          const mode = String(row[1] || '').toLowerCase();
+          if (mode.includes('day')) reportType = 'daily';
+          else if (mode.includes('week')) reportType = 'weekly';
+          else if (mode.includes('month')) reportType = 'monthly';
           break;
         }
       }
     }
 
-    if (headers.length === 0) {
-      // Try to detect data without clear headers
-      headers = jsonData[0]?.map((_, i) => `col${i}`) || [];
+    // Read Data sheet
+    const dataSheet = workbook.Sheets['Data'];
+    const jsonData = XLSX.utils.sheet_to_json(dataSheet, { header: 1 }) as any[][];
+
+    if (jsonData.length < 2) {
+      errors.push('No data rows found in report');
+      return { data, reservations, reportType, errors };
     }
 
-    // Detect report type based on headers
-    const headersStr = headers.join('|');
-    if (headersStr.includes('week')) {
-      reportType = 'weekly';
-    } else if (headersStr.includes('month') || headersStr.includes('maand')) {
-      reportType = 'monthly';
-    } else {
-      reportType = 'daily';
-    }
-
-    // Find relevant column indices
-    const findColIndex = (keywords: string[]) => {
-      for (const keyword of keywords) {
-        const index = headers.findIndex(h => h.includes(keyword));
-        if (index >= 0) return index;
+    // First row has periods (columns 3+)
+    const headerRow = jsonData[0];
+    const periods: string[] = [];
+    for (let i = 3; i < headerRow.length; i++) {
+      if (headerRow[i] && headerRow[i] !== 'Total') {
+        periods.push(String(headerRow[i]));
       }
-      return -1;
-    };
+    }
 
-    const dateCol = findColIndex(['date', 'datum', 'period', 'day', 'week', 'month']);
-    const occupancyCol = findColIndex(['occupancy', 'bezetting', '%']);
-    const revenueCol = findColIndex(['revenue', 'omzet', 'total']);
-    const roomsCol = findColIndex(['rooms', 'kamers', 'occupied']);
-    const arrCol = findColIndex(['arrival', 'aankomst', 'check-in', 'in']);
-    const depCol = findColIndex(['departure', 'vertrek', 'check-out', 'out']);
-    const adrCol = findColIndex(['adr', 'rate', 'tarief', 'average']);
+    // Find key rows by metric name
+    let occupancyRow: any[] | null = null;
+    let occupiedRow: any[] | null = null;
+    let availableRow: any[] | null = null;
+    let revenueRow: any[] | null = null;
+    let adrRow: any[] | null = null;
+    let customersRow: any[] | null = null;
 
-    // Process data rows
-    for (let i = headerRowIndex + 1; i < jsonData.length; i++) {
-      const row = jsonData[i];
-      if (!row || !Array.isArray(row) || row.length < 2) continue;
-
-      try {
-        // Parse date
-        let dateValue = dateCol >= 0 ? row[dateCol] : row[0];
-        let date: Date | null = null;
-        
-        if (dateValue) {
-          if (typeof dateValue === 'number') {
-            // Excel serial date
-            date = XLSX.SSF.parse_date_code(dateValue);
-            if (date) {
-              date = new Date(date.y, date.m - 1, date.d);
-            }
-          } else if (typeof dateValue === 'string') {
-            // Try various date formats
-            const cleaned = dateValue.trim();
-            const parts = cleaned.split(/[-\/\.]/);
-            if (parts.length >= 3) {
-              // DD-MM-YYYY or YYYY-MM-DD
-              if (parts[0].length === 4) {
-                date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-              } else {
-                date = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
-              }
-            } else {
-              date = new Date(cleaned);
-            }
-          }
+    for (const row of jsonData) {
+      const metric = String(row[2] || '').toLowerCase();
+      const group = String(row[0] || '').toLowerCase();
+      
+      // Look for room/accommodation metrics
+      if (group.includes('stay') || group.includes('accom') || group.includes('room')) {
+        if (metric.includes('occupancy') && !metric.includes('direct')) {
+          occupancyRow = row;
+        } else if (metric === 'occupied' || metric === 'directly occupied') {
+          occupiedRow = row;
+        } else if (metric === 'available') {
+          availableRow = row;
+        } else if (metric === 'revenue' && !metric.includes('per') && !metric.includes('direct')) {
+          revenueRow = row;
+        } else if (metric.includes('average rate') || metric.includes('adr')) {
+          adrRow = row;
+        } else if (metric === 'customers') {
+          customersRow = row;
         }
+      }
+    }
 
-        if (!date || isNaN(date.getTime())) {
-          // For weekly/monthly reports without clear dates, generate dates
-          if (reportType !== 'daily') {
-            date = new Date();
-            date.setDate(date.getDate() - (jsonData.length - i));
-          } else {
-            continue;
-          }
+    // Extract data for each period
+    for (let i = 0; i < periods.length; i++) {
+      const colIndex = i + 3; // Data starts at column 3
+
+      const parseNum = (row: any[] | null, idx: number): number => {
+        if (!row || idx >= row.length) return 0;
+        const val = row[idx];
+        if (typeof val === 'number') return val;
+        if (typeof val === 'string') {
+          return parseFloat(val.replace(/[^0-9.,\-]/g, '').replace(',', '.')) || 0;
         }
+        return 0;
+      };
 
-        // Parse numeric values
-        const parseNum = (val: any): number => {
-          if (typeof val === 'number') return val;
-          if (typeof val === 'string') {
-            const cleaned = val.replace(/[^0-9.,\-]/g, '').replace(',', '.');
-            return parseFloat(cleaned) || 0;
-          }
-          return 0;
-        };
+      const occupancy = parseNum(occupancyRow, colIndex);
+      const occupied = parseNum(occupiedRow, colIndex);
+      const available = parseNum(availableRow, colIndex);
+      const revenue = parseNum(revenueRow, colIndex);
+      const adr = parseNum(adrRow, colIndex);
+      const customers = parseNum(customersRow, colIndex);
 
-        const occupancy = occupancyCol >= 0 ? parseNum(row[occupancyCol]) : 0;
-        const revenue = revenueCol >= 0 ? parseNum(row[revenueCol]) : 0;
-        const occupiedRooms = roomsCol >= 0 ? parseNum(row[roomsCol]) : Math.round((occupancy / 100) * totalRooms);
-        const arrivals = arrCol >= 0 ? parseNum(row[arrCol]) : 0;
-        const departures = depCol >= 0 ? parseNum(row[depCol]) : 0;
-        const adr = adrCol >= 0 ? parseNum(row[adrCol]) : (occupiedRooms > 0 ? revenue / occupiedRooms : 0);
+      // Skip if no meaningful data
+      if (occupied === 0 && revenue === 0) continue;
 
-        // Skip rows with no meaningful data
-        if (occupancy === 0 && revenue === 0 && occupiedRooms === 0) continue;
+      data.push({
+        period: periods[i],
+        occupancy: occupancy > 1 ? occupancy : occupancy * 100, // Convert if decimal
+        occupiedRooms: Math.round(occupied),
+        available: Math.round(available),
+        revenue: revenue,
+        adr: adr,
+        customers: Math.round(customers),
+      });
 
-        data.push({
-          date,
-          occupancy: Math.min(100, Math.max(0, occupancy)),
-          occupiedRooms,
-          revenue,
-          adr,
-          arrivals,
-          departures,
-        });
-
-        // Create reservation entries for each occupied room
-        for (let r = 0; r < occupiedRooms; r++) {
-          const checkIn = new Date(date);
-          const checkOut = new Date(date);
+      // Create reservation entries for tracking
+      const periodDate = parsePeriodDate(periods[i]);
+      if (periodDate && occupied > 0) {
+        for (let r = 0; r < Math.min(occupied, 100); r++) {
+          const checkOut = new Date(periodDate);
           checkOut.setDate(checkOut.getDate() + 1);
           
           reservations.push({
-            reservation_id: `MEWS-${date.getTime()}-${r}`,
+            reservation_id: `MEWS-${periodDate.getTime()}-${r}`,
             guest_name: `Guest ${r + 1}`,
             room_number: String(100 + (r % totalRooms)),
-            check_in: checkIn.toISOString().split('T')[0],
+            check_in: periodDate.toISOString().split('T')[0],
             check_out: checkOut.toISOString().split('T')[0],
             status: 'confirmed',
             adults: 2,
@@ -187,14 +166,11 @@ export function parseXLSX(content: string | ArrayBuffer, totalRooms: number = 24
             payment_status: 'paid',
           });
         }
-
-      } catch (rowError: any) {
-        errors.push(`Row ${i + 1}: ${rowError.message}`);
       }
     }
 
     if (data.length === 0) {
-      errors.push('No valid data found in file');
+      errors.push('No valid data found in report');
     }
 
   } catch (error: any) {
@@ -204,39 +180,69 @@ export function parseXLSX(content: string | ArrayBuffer, totalRooms: number = 24
   return { data, reservations, reportType, errors };
 }
 
-// Convert XLSX data to displayable stats
-export function xlsxDataToStats(data: MewsReportData[], totalRooms: number = 24) {
+// Parse period string to date
+function parsePeriodDate(period: string): Date | null {
+  try {
+    // Handle formats like "January 2026", "29-12-2025 - 04-01-2026", etc.
+    const cleaned = period.trim();
+    
+    // Monthly: "January 2026"
+    const monthMatch = cleaned.match(/^([A-Za-z]+)\s+(\d{4})$/);
+    if (monthMatch) {
+      const months: Record<string, number> = {
+        january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+        july: 6, august: 7, september: 8, october: 9, november: 10, december: 11
+      };
+      const monthNum = months[monthMatch[1].toLowerCase()];
+      if (monthNum !== undefined) {
+        return new Date(parseInt(monthMatch[2]), monthNum, 15);
+      }
+    }
+    
+    // Weekly: "29-12-2025 - 04-01-2026" - use start date
+    const weekMatch = cleaned.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+    if (weekMatch) {
+      return new Date(parseInt(weekMatch[3]), parseInt(weekMatch[2]) - 1, parseInt(weekMatch[1]));
+    }
+    
+    // Daily: "24-02-2026" or "2026-02-24"
+    const dayMatch1 = cleaned.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (dayMatch1) {
+      return new Date(parseInt(dayMatch1[3]), parseInt(dayMatch1[2]) - 1, parseInt(dayMatch1[1]));
+    }
+    
+    const dayMatch2 = cleaned.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (dayMatch2) {
+      return new Date(parseInt(dayMatch2[1]), parseInt(dayMatch2[2]) - 1, parseInt(dayMatch2[3]));
+    }
+    
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Convert parsed data to dashboard stats
+export function xlsxDataToStats(data: MewsReportData[], reportType: string) {
   if (data.length === 0) return null;
 
-  // Sort by date
-  const sorted = [...data].sort((a, b) => a.date.getTime() - b.date.getTime());
-  
-  // Today's data (most recent)
-  const today = sorted[sorted.length - 1];
-  
-  // Calculate averages
   const avgOccupancy = data.reduce((sum, d) => sum + d.occupancy, 0) / data.length;
   const totalRevenue = data.reduce((sum, d) => sum + d.revenue, 0);
-  const avgAdr = data.reduce((sum, d) => sum + d.adr, 0) / data.length;
-  
+  const avgAdr = data.filter(d => d.adr > 0).length > 0 
+    ? data.reduce((sum, d) => sum + d.adr, 0) / data.filter(d => d.adr > 0).length 
+    : 0;
+  const totalCustomers = data.reduce((sum, d) => sum + d.customers, 0);
+  const totalOccupied = data.reduce((sum, d) => sum + d.occupiedRooms, 0);
+
   return {
-    today: {
-      date: today.date,
-      occupancy: today.occupancy,
-      occupiedRooms: today.occupiedRooms,
-      revenue: today.revenue,
-      adr: today.adr,
-      arrivals: today.arrivals || 0,
-      departures: today.departures || 0,
-    },
-    period: {
-      startDate: sorted[0].date,
-      endDate: sorted[sorted.length - 1].date,
-      avgOccupancy,
-      totalRevenue,
-      avgAdr,
-      daysCount: data.length,
-    },
-    daily: sorted,
+    periods: data,
+    summary: {
+      avgOccupancy: Math.round(avgOccupancy * 10) / 10,
+      totalRevenue: Math.round(totalRevenue * 100) / 100,
+      avgAdr: Math.round(avgAdr * 100) / 100,
+      totalCustomers,
+      totalOccupied,
+      reportType,
+    }
   };
 }
