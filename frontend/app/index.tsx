@@ -1,32 +1,21 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
-  RefreshControl,
-  Dimensions,
-  Animated,
   TouchableOpacity,
-  ActivityIndicator,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
+  Dimensions,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-
-import { loadReservations, loadSettings, getLastUpdate, DEFAULT_SETTINGS, saveSettings, saveReservations } from '../utils/storage';
-import { calculateDashboard, DashboardData, generateDemoReservations, calculateDailyStats, DailyStats } from '../utils/calculations';
 import { useLanguage } from '../utils/LanguageContext';
-import { getDayNames, getMonthNames, getFullMonthNames } from '../utils/i18n';
 
 const { width } = Dimensions.get('window');
-const CARD_WIDTH = width - 32;
 
 // Hotel Logo Component
-const HotelLogo = ({ size = 40 }: { size?: number }) => (
+const HotelLogo = ({ size = 80 }: { size?: number }) => (
   <View style={[logoStyles.container, { width: size, height: size }]}>
     <View style={[logoStyles.topHalf, { borderTopLeftRadius: size/2, borderTopRightRadius: size/2 }]} />
     <View style={[logoStyles.bottomHalf, { borderBottomLeftRadius: size/2, borderBottomRightRadius: size/2 }]}>
@@ -39,481 +28,88 @@ const logoStyles = StyleSheet.create({
   container: { overflow: 'hidden', borderRadius: 999 },
   topHalf: { flex: 1, backgroundColor: '#8FAFC4' },
   bottomHalf: { flex: 1, backgroundColor: '#5F7F94', position: 'relative' },
-  wave: { position: 'absolute', top: -6, left: 0, right: 0, height: 12, backgroundColor: '#8FAFC4', borderBottomLeftRadius: 100, borderBottomRightRadius: 100, transform: [{ scaleX: 1.5 }] },
+  wave: { position: 'absolute', top: -8, left: 0, right: 0, height: 16, backgroundColor: '#8FAFC4', borderBottomLeftRadius: 100, borderBottomRightRadius: 100, transform: [{ scaleX: 1.5 }] },
 });
-
-// Animated Counter
-const AnimatedCounter = ({ value, suffix = '', style }: { value: number; suffix?: string; style?: any }) => {
-  const [displayValue, setDisplayValue] = useState(0);
-  const animatedValue = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    animatedValue.setValue(0);
-    Animated.timing(animatedValue, { toValue: value, duration: 800, useNativeDriver: false }).start();
-    const listener = animatedValue.addListener(({ value }) => setDisplayValue(value));
-    return () => animatedValue.removeListener(listener);
-  }, [value]);
-
-  return <Text style={style}>{displayValue.toFixed(0)}{suffix}</Text>;
-};
-
-// Real-time Clock
-const RealTimeClock = () => {
-  const [time, setTime] = useState(new Date());
-  useEffect(() => {
-    const timer = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-  return <Text style={styles.clockText}>{time.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</Text>;
-};
 
 // Language Toggle
 const LanguageToggle = () => {
   const { language, setLanguage } = useLanguage();
   return (
     <View style={styles.langToggle}>
-      <TouchableOpacity style={[styles.langBtn, language === 'en' && styles.langBtnActive]} onPress={() => setLanguage('en')}>
+      <TouchableOpacity 
+        style={[styles.langBtn, language === 'en' && styles.langBtnActive]} 
+        onPress={() => setLanguage('en')}
+      >
         <Text style={[styles.langBtnText, language === 'en' && styles.langBtnTextActive]}>EN</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={[styles.langBtn, language === 'nl' && styles.langBtnActive]} onPress={() => setLanguage('nl')}>
+      <TouchableOpacity 
+        style={[styles.langBtn, language === 'nl' && styles.langBtnActive]} 
+        onPress={() => setLanguage('nl')}
+      >
         <Text style={[styles.langBtnText, language === 'nl' && styles.langBtnTextActive]}>NL</Text>
       </TouchableOpacity>
     </View>
   );
 };
 
-// Status Badge
-const StatusBadge = ({ status, reason, reasonParams }: { status: 'green' | 'yellow' | 'red'; reason?: string | null; reasonParams?: string[] }) => {
-  const { t } = useLanguage();
-  const config = {
-    green: { color: '#10B981', text: t.underControl, icon: 'checkmark-circle' },
-    yellow: { color: '#F59E0B', text: t.attention, icon: 'warning' },
-    red: { color: '#EF4444', text: t.risk, icon: 'alert-circle' },
-  }[status];
-
-  const translateReason = (key: string | null, params: string[] = []) => {
-    if (!key) return null;
-    const map: Record<string, string> = { 'today_occupancy_below': t.todayOccupancyBelow, 'd7_below_target': t.d7BelowTarget, 'd14_below_target': t.d14BelowTarget };
-    let msg = map[key] || key;
-    params.forEach((p, i) => { msg = msg.replace(`{${i}}`, p); });
-    return msg;
-  };
-
-  return (
-    <View style={styles.statusContainer}>
-      <View style={[styles.statusBadge, { backgroundColor: config.color + '20' }]}>
-        <Ionicons name={config.icon as any} size={16} color={config.color} />
-        <Text style={[styles.statusText, { color: config.color }]}>{config.text}</Text>
+// Mode Card
+const ModeCard = ({ 
+  icon, 
+  title, 
+  description, 
+  onPress, 
+  color,
+  highlight 
+}: { 
+  icon: string; 
+  title: string; 
+  description: string; 
+  onPress: () => void; 
+  color: string;
+  highlight?: string;
+}) => (
+  <TouchableOpacity style={styles.modeCard} onPress={onPress} activeOpacity={0.8}>
+    <View style={[styles.modeIconContainer, { backgroundColor: color + '20' }]}>
+      <Ionicons name={icon as any} size={40} color={color} />
+    </View>
+    <Text style={styles.modeTitle}>{title}</Text>
+    <Text style={styles.modeDescription}>{description}</Text>
+    {highlight && (
+      <View style={[styles.highlightBadge, { backgroundColor: color + '20' }]}>
+        <Text style={[styles.highlightText, { color }]}>{highlight}</Text>
       </View>
-      {reason && status !== 'green' && <Text style={[styles.statusReason, { color: config.color }]}>{translateReason(reason, reasonParams || [])}</Text>}
+    )}
+    <View style={[styles.modeArrow, { backgroundColor: color }]}>
+      <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
     </View>
-  );
-};
-
-// Trend Indicator
-const TrendIndicator = ({ trend }: { trend: 'improving' | 'stable' | 'worsening' }) => {
-  const { t } = useLanguage();
-  const config = { improving: { icon: '↑', text: t.improving, color: '#10B981' }, stable: { icon: '→', text: t.stable, color: '#6B7280' }, worsening: { icon: '↓', text: t.worsening, color: '#EF4444' } }[trend];
-  return (
-    <View style={styles.trendContainer}>
-      <Text style={[styles.trendArrow, { color: config.color }]}>{config.icon}</Text>
-      <Text style={[styles.trendText, { color: config.color }]}>{config.text}</Text>
-    </View>
-  );
-};
-
-// Pagination Dots
-const PaginationDots = ({ total, current }: { total: number; current: number }) => (
-  <View style={styles.paginationContainer}>
-    {Array.from({ length: total }).map((_, i) => (
-      <View key={i} style={[styles.paginationDot, current === i && styles.paginationDotActive]} />
-    ))}
-  </View>
+  </TouchableOpacity>
 );
 
-// Day Card (Swipeable)
-const DayCard = ({ dayStats, dayLabel, isToday }: { dayStats: DailyStats | null; dayLabel: string; isToday: boolean }) => {
-  const { t } = useLanguage();
-  const fmt = (v: number) => `€${(v || 0).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`;
-
-  if (!dayStats) return <View style={[styles.dayCard, { width: CARD_WIDTH }]}><ActivityIndicator color="#10B981" style={{ marginTop: 60 }} /></View>;
-
-  return (
-    <View style={[styles.dayCard, { width: CARD_WIDTH }]}>
-      <Text style={[styles.dayCardLabel, isToday && styles.dayCardLabelToday]}>{dayLabel}</Text>
-      <View style={styles.dayCardGrid}>
-        <View style={styles.dayCardOccupancy}>
-          <Text style={styles.dayCardOccLabel}>{t.occupancy}</Text>
-          <Text style={styles.dayCardOccValue}>{(dayStats.occupancy_percent || 0).toFixed(0)}%</Text>
-          <Text style={styles.dayCardOccRooms}>{dayStats.rooms_occupied || 0} / {dayStats.total_rooms || 26} {t.rooms}</Text>
-        </View>
-        <View style={styles.dayCardArrDep}>
-          <View style={styles.dayCardArrDepItem}>
-            <Ionicons name="log-in" size={16} color="#10B981" />
-            <Text style={styles.dayCardArrDepValue}>{dayStats.arrivals || 0}</Text>
-            <Text style={styles.dayCardArrDepLabel}>{t.arrivals}</Text>
-          </View>
-          <View style={styles.dayCardDivider} />
-          <View style={styles.dayCardArrDepItem}>
-            <Ionicons name="log-out" size={16} color="#F59E0B" />
-            <Text style={styles.dayCardArrDepValue}>{dayStats.departures || 0}</Text>
-            <Text style={styles.dayCardArrDepLabel}>{t.departures}</Text>
-          </View>
-        </View>
-      </View>
-      <View style={styles.dayCardRevenue}>
-        <Text style={styles.dayCardRevTitle}>{t.dailyRevenue}</Text>
-        <View style={styles.dayCardRevGrid}>
-          <View style={styles.dayCardRevItem}><Ionicons name="bed" size={14} color="#60A5FA" /><Text style={styles.dayCardRevValue}>{fmt(dayStats.room_revenue)}</Text></View>
-          <View style={styles.dayCardRevItem}><Ionicons name="car" size={14} color="#A78BFA" /><Text style={styles.dayCardRevValue}>{fmt(dayStats.parking_revenue)}</Text></View>
-          <View style={styles.dayCardRevItem}><Ionicons name="cafe" size={14} color="#F472B6" /><Text style={styles.dayCardRevValue}>{fmt(dayStats.vending_revenue)}</Text></View>
-        </View>
-        <Text style={styles.dayCardTax}>{t.cityTax}: {fmt(dayStats.city_tax)} ({t.separate})</Text>
-      </View>
-    </View>
-  );
-};
-
-// Radar Day Card
-const RadarDayCard = ({ day, index }: { day: any; index: number }) => {
-  const { language } = useLanguage();
-  const dayNames = getDayNames(language);
-  const monthNames = getMonthNames(language);
-  const d = new Date(day.date);
-  const urgencyColor = day.occupancy_percent >= day.target * 0.9 ? '#10B981' : day.occupancy_percent >= day.target * 0.7 ? '#F59E0B' : '#EF4444';
-  const borderColor = day.urgency === 'high' ? '#EF4444' : day.urgency === 'medium' ? '#F59E0B' : '#374151';
-
-  return (
-    <View style={[styles.radarCard, { borderLeftColor: borderColor, borderLeftWidth: 3 }, index === 0 && styles.radarCardFirst]}>
-      <View style={styles.radarDateContainer}>
-        <Text style={styles.radarDayName}>{dayNames[d.getDay()]}</Text>
-        <Text style={styles.radarDayNum}>{day.day_num}</Text>
-        <Text style={styles.radarMonth}>{monthNames[d.getMonth()]}</Text>
-      </View>
-      <View style={styles.radarStatsContainer}>
-        <Text style={[styles.radarOccupancyValue, { color: urgencyColor }]}>{day.occupancy_percent.toFixed(0)}%</Text>
-        <Text style={styles.radarRoomsValue}>{day.rooms_sold}/{day.total_rooms}</Text>
-        {day.adr > 0 && <Text style={styles.radarAdrValue}>€{day.adr.toFixed(0)}</Text>}
-      </View>
-    </View>
-  );
-};
-
-// Alert Item
-const AlertItem = ({ alert }: { alert: any }) => {
-  const { t } = useLanguage();
-  const color = (s: string) => s === 'ok' ? '#10B981' : s === 'warning' ? '#F59E0B' : '#EF4444';
-  const msgMap: Record<string, string> = { 'occupancy_below_target': t.occupancyBelowTarget, 'critical_days_ahead': t.criticalDaysAhead, 'consecutive_low_days': t.consecutiveLowDays, 'no_critical_issues': t.noCriticalIssues };
-  const ctxMap: Record<string, string> = { 'next_days_on_track': t.nextDaysOnTrack, 'next_days_below_target': t.nextDaysBelowTarget, 'today_on_target': t.todayOnTarget, 'requires_attention': t.requiresAttention };
-  
-  let msg = msgMap[alert.message] || alert.message;
-  (alert.message_params || []).forEach((p: string, i: number) => { msg = msg.replace(`{${i}}`, p); });
-  const ctx = alert.context ? (ctxMap[alert.context] || alert.context) : '';
-
-  return (
-    <View style={styles.alertItem}>
-      <View style={styles.alertIndicators}>
-        <View style={[styles.alertDot, { backgroundColor: color(alert.today_status) }]} />
-        <View style={styles.alertDotConnector} />
-        <View style={[styles.alertDot, { backgroundColor: color(alert.future_status) }]} />
-      </View>
-      <View style={styles.alertContent}>
-        <Text style={styles.alertText}>{msg}</Text>
-        {ctx ? <Text style={styles.alertContext}>{ctx}</Text> : null}
-      </View>
-    </View>
-  );
-};
-
-// Weekly Chart
-const WeeklyChart = ({ weekData }: { weekData: any[] }) => {
-  const { t, language } = useLanguage();
-  const dayNames = getDayNames(language);
-  const barColor = (v: number) => v >= 70 ? '#10B981' : v >= 50 ? '#F59E0B' : '#EF4444';
-
-  if (!weekData || weekData.length === 0) return null;
-
-  return (
-    <View style={styles.chartCard}>
-      <Text style={styles.chartCardTitle}>{t.weeklyOccupancy}</Text>
-      <View style={styles.chartBarsRow}>
-        {weekData.slice(0, 7).map((day, i) => (
-          <View key={i} style={styles.chartBarWrapper}>
-            <View style={[styles.chartBarCol, { height: 100 }]}>
-              <View style={[styles.chartBar, { height: Math.max(4, day.occupancy_percent), backgroundColor: barColor(day.occupancy_percent) }]} />
-            </View>
-            <Text style={styles.chartBarLabel}>{dayNames[i]}</Text>
-            <Text style={styles.chartBarValue}>{day.occupancy_percent.toFixed(0)}%</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-};
-
-// Monthly Chart
-const MonthlyChart = ({ monthData }: { monthData: any }) => {
-  const { t, language } = useLanguage();
-  const fullMonths = getFullMonthNames(language);
-  const barColor = (v: number) => v >= 70 ? '#10B981' : v >= 50 ? '#F59E0B' : '#EF4444';
-  const weeks = [
-    { label: 'W1', value: 45 + Math.random() * 30 },
-    { label: 'W2', value: 50 + Math.random() * 30 },
-    { label: 'W3', value: 40 + Math.random() * 35 },
-    { label: 'W4', value: monthData?.occupancy_accumulated || 50 },
-  ];
-
-  return (
-    <View style={styles.chartCard}>
-      <Text style={styles.chartCardTitle}>{fullMonths[new Date().getMonth()]} {t.occupancy}</Text>
-      <View style={styles.chartBarsRow}>
-        {weeks.map((w, i) => (
-          <View key={i} style={[styles.chartBarWrapper, { flex: 1 }]}>
-            <View style={[styles.chartBarCol, { height: 100 }]}>
-              <View style={[styles.chartBar, { height: Math.max(4, w.value), backgroundColor: barColor(w.value), width: 36 }]} />
-            </View>
-            <Text style={styles.chartBarLabel}>{w.label}</Text>
-            <Text style={styles.chartBarValue}>{w.value.toFixed(0)}%</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-};
-
-// Week Stats Card (Swipeable) - 5 weeks: 2 back, current, 2 forward
-const WeekStatsCard = ({ weekOffset, reservations, settings }: { weekOffset: number; reservations: any[]; settings: any }) => {
-  const { t, language } = useLanguage();
-  const today = new Date();
-  const weekStart = new Date(today);
-  weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7) + (weekOffset * 7));
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-
-  // Calculate week stats
-  let totalOcc = 0, totalRev = 0, totalAdr = 0, daysWithAdr = 0;
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(weekStart);
-    d.setDate(weekStart.getDate() + i);
-    const stats = calculateDailyStats(d, reservations, settings);
-    totalOcc += stats.occupancy_percent;
-    totalRev += stats.room_revenue + stats.parking_revenue + stats.vending_revenue;
-    if (stats.adr > 0) { totalAdr += stats.adr; daysWithAdr++; }
-  }
-
-  const avgOcc = totalOcc / 7;
-  const avgAdr = daysWithAdr > 0 ? totalAdr / daysWithAdr : 0;
-  const fmt = (v: number) => `€${v.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`;
-
-  const getWeekLabel = () => {
-    if (weekOffset === 0) return language === 'en' ? 'Current Week' : 'Huidige Week';
-    if (weekOffset === -1) return language === 'en' ? 'Last Week' : 'Vorige Week';
-    if (weekOffset === -2) return language === 'en' ? '2 Weeks Ago' : '2 Weken Geleden';
-    if (weekOffset === 1) return language === 'en' ? 'Next Week' : 'Volgende Week';
-    if (weekOffset === 2) return language === 'en' ? 'In 2 Weeks' : 'Over 2 Weken';
-    return '';
-  };
-
-  const formatDateRange = () => {
-    const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
-    return `${weekStart.toLocaleDateString(language === 'en' ? 'en-GB' : 'nl-NL', opts)} - ${weekEnd.toLocaleDateString(language === 'en' ? 'en-GB' : 'nl-NL', opts)}`;
-  };
-
-  return (
-    <View style={[styles.weekMonthCard, { width: CARD_WIDTH }]}>
-      <View style={styles.controlCardHeader}>
-        <View>
-          <Text style={[styles.controlCardTitle, weekOffset === 0 && { color: '#10B981' }]}>{getWeekLabel()}</Text>
-          <Text style={styles.dateRangeText}>{formatDateRange()}</Text>
-        </View>
-      </View>
-      <View style={styles.controlStatsRow}>
-        <View style={styles.controlStat}>
-          <Text style={styles.controlStatValue}>{avgOcc.toFixed(0)}%</Text>
-          <Text style={styles.controlStatLabel}>{t.avgOccupancy}</Text>
-        </View>
-        <View style={styles.controlStatDivider} />
-        <View style={styles.controlStat}>
-          <Text style={styles.controlStatValue}>{fmt(totalRev)}</Text>
-          <Text style={styles.controlStatLabel}>{t.totalRevenue}</Text>
-        </View>
-        <View style={styles.controlStatDivider} />
-        <View style={styles.controlStat}>
-          <Text style={styles.controlStatValue}>{fmt(avgAdr)}</Text>
-          <Text style={styles.controlStatLabel}>{t.avgAdr}</Text>
-        </View>
-      </View>
-    </View>
-  );
-};
-
-// Month Stats Card (Swipeable) - 6 months: 2 back, current, 3 forward
-const MonthStatsCard = ({ monthOffset, reservations, settings }: { monthOffset: number; reservations: any[]; settings: any }) => {
-  const { t, language } = useLanguage();
-  const fullMonths = getFullMonthNames(language);
-  
-  const targetMonth = new Date();
-  targetMonth.setMonth(targetMonth.getMonth() + monthOffset);
-  targetMonth.setDate(1);
-  
-  const monthEnd = new Date(targetMonth);
-  monthEnd.setMonth(monthEnd.getMonth() + 1);
-  monthEnd.setDate(0);
-  
-  const daysInMonth = monthEnd.getDate();
-  const isCurrentMonth = monthOffset === 0;
-  const daysToCalc = isCurrentMonth ? new Date().getDate() : daysInMonth;
-
-  // Calculate month stats
-  let totalOcc = 0, totalRev = 0;
-  for (let i = 0; i < daysToCalc; i++) {
-    const d = new Date(targetMonth);
-    d.setDate(i + 1);
-    const stats = calculateDailyStats(d, reservations, settings);
-    totalOcc += stats.occupancy_percent;
-    totalRev += stats.room_revenue + stats.parking_revenue + stats.vending_revenue;
-  }
-
-  const avgOcc = daysToCalc > 0 ? totalOcc / daysToCalc : 0;
-  const fmt = (v: number) => `€${v.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`;
-
-  return (
-    <View style={[styles.weekMonthCard, { width: CARD_WIDTH }]}>
-      <View style={styles.controlCardHeader}>
-        <Text style={[styles.controlCardTitle, isCurrentMonth && { color: '#10B981' }]}>
-          {fullMonths[targetMonth.getMonth()]} {targetMonth.getFullYear()}
-        </Text>
-        <Text style={styles.monthProgress}>
-          {isCurrentMonth ? `${t.day} ${daysToCalc} ${t.of} ${daysInMonth}` : `${daysInMonth} ${language === 'en' ? 'days' : 'dagen'}`}
-        </Text>
-      </View>
-      <View style={styles.controlStatsRow}>
-        <View style={styles.controlStat}>
-          <Text style={styles.controlStatValue}>{avgOcc.toFixed(0)}%</Text>
-          <Text style={styles.controlStatLabel}>{isCurrentMonth ? t.accumulatedOccupancy : t.avgOccupancy}</Text>
-        </View>
-        <View style={styles.controlStatDivider} />
-        <View style={styles.controlStat}>
-          <Text style={styles.controlStatValue}>{fmt(totalRev)}</Text>
-          <Text style={styles.controlStatLabel}>{isCurrentMonth ? t.accumulatedRevenue : t.totalRevenue}</Text>
-        </View>
-      </View>
-      {isCurrentMonth && (
-        <View style={styles.projectionBox}>
-          <Ionicons name="analytics-outline" size={14} color="#9CA3AF" />
-          <Text style={styles.projectionText}>{t.projectionMessage} {avgOcc.toFixed(0)}%</Text>
-        </View>
-      )}
-    </View>
-  );
-};
-
-export default function Dashboard() {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [weekChartData, setWeekChartData] = useState<any[]>([]);
-  const [dayStatsArray, setDayStatsArray] = useState<DailyStats[]>([]);
-  const [reservations, setReservations] = useState<any[]>([]);
-  const [settings, setSettingsState] = useState(DEFAULT_SETTINGS);
-  
-  // Swipe indices
-  const [currentDayIndex, setCurrentDayIndex] = useState(2);
-  const [currentChartIndex, setCurrentChartIndex] = useState(0);
-  const [currentWeekIndex, setCurrentWeekIndex] = useState(2); // Start at current week (index 2)
-  const [currentMonthIndex, setCurrentMonthIndex] = useState(2); // Start at current month (index 2)
-  
+export default function ModeSelector() {
   const router = useRouter();
-  const { t, language } = useLanguage();
-  
-  const dayScrollRef = useRef<ScrollView>(null);
-  const chartScrollRef = useRef<ScrollView>(null);
-  const weekScrollRef = useRef<ScrollView>(null);
-  const monthScrollRef = useRef<ScrollView>(null);
+  const { language } = useLanguage();
 
-  const dayLabels = [
-    language === 'en' ? '2 days ago' : '2 dagen geleden',
-    language === 'en' ? 'Yesterday' : 'Gisteren',
-    language === 'en' ? 'Today' : 'Vandaag',
-    language === 'en' ? 'Tomorrow' : 'Morgen',
-    language === 'en' ? 'In 2 days' : 'Over 2 dagen',
-  ];
-
-  // Week offsets: -2, -1, 0, 1, 2
-  const weekOffsets = [-2, -1, 0, 1, 2];
-  // Month offsets: -2, -1, 0, 1, 2, 3
-  const monthOffsets = [-2, -1, 0, 1, 2, 3];
-
-  const loadDashboard = useCallback(async () => {
-    try {
-      const loadedSettings = await loadSettings();
-      if (loadedSettings.total_rooms !== 24) {
-        loadedSettings.total_rooms = 24;
-        await saveSettings(loadedSettings);
-      }
-      setSettingsState(loadedSettings);
-      
-      let loadedReservations = await loadReservations();
-      const lastUpdate = await getLastUpdate();
-      
-      if (loadedReservations.length === 0) {
-        loadedReservations = generateDemoReservations(loadedSettings);
-        await saveReservations(loadedReservations);
-      }
-      setReservations(loadedReservations);
-      
-      const dashboardData = calculateDashboard(loadedReservations, loadedSettings, lastUpdate);
-      setData(dashboardData);
-      
-      // Day stats for swipeable cards
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const dayStats: DailyStats[] = [];
-      for (let i = -2; i <= 2; i++) {
-        const d = new Date(today);
-        d.setDate(today.getDate() + i);
-        dayStats.push(calculateDailyStats(d, loadedReservations, loadedSettings));
-      }
-      setDayStatsArray(dayStats);
-      
-      // Weekly chart data
-      const weekStats = dashboardData.radar.slice(0, 7).map(r => ({ occupancy_percent: r.occupancy_percent || 0 }));
-      setWeekChartData(weekStats);
-      
-    } catch (err) {
-      console.error('Error loading dashboard:', err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => { loadDashboard(); }, [loadDashboard]);
-  
-  // Scroll to current items on mount
-  useEffect(() => {
-    setTimeout(() => {
-      dayScrollRef.current?.scrollTo({ x: 2 * CARD_WIDTH, animated: false });
-      weekScrollRef.current?.scrollTo({ x: 2 * CARD_WIDTH, animated: false });
-      monthScrollRef.current?.scrollTo({ x: 2 * CARD_WIDTH, animated: false });
-    }, 100);
-  }, [dayStatsArray]);
-
-  const onRefresh = useCallback(() => { setRefreshing(true); loadDashboard(); }, [loadDashboard]);
-
-  const handleScroll = (setter: (i: number) => void) => (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    setter(Math.round(e.nativeEvent.contentOffset.x / CARD_WIDTH));
+  const t = language === 'en' ? {
+    welcome: 'Welcome to',
+    hotelName: 'BadHotel Noordwijk',
+    selectMode: 'Select your access mode',
+    guestMode: 'Guest Mode',
+    guestDesc: 'Hotel information, amenities, nearby places & booking',
+    guestHighlight: 'Scan QR Code',
+    managerMode: 'Manager Mode',
+    managerDesc: 'Live operations dashboard, occupancy & revenue analytics',
+    managerHighlight: 'Login Required',
+  } : {
+    welcome: 'Welkom bij',
+    hotelName: 'BadHotel Noordwijk',
+    selectMode: 'Selecteer uw toegangsmodus',
+    guestMode: 'Gastmodus',
+    guestDesc: 'Hotel informatie, voorzieningen, nabije plekken & boeken',
+    guestHighlight: 'Scan QR Code',
+    managerMode: 'Manager Modus',
+    managerDesc: 'Live operaties dashboard, bezetting & omzet analyses',
+    managerHighlight: 'Login Vereist',
   };
-
-  const formatDate = (s: string | null) => {
-    if (!s) return t.never;
-    const d = new Date(s);
-    return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  };
-
-  if (loading) {
-    return <View style={styles.loadingContainer}><StatusBar style="light" /><ActivityIndicator size="large" color="#10B981" /><Text style={styles.loadingText}>Loading...</Text></View>;
-  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -521,204 +117,67 @@ export default function Dashboard() {
       
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View style={styles.brandContainer}>
-            <HotelLogo size={36} />
-            <View style={styles.brandTextContainer}>
-              <Text style={styles.brandName}>BadHotel</Text>
-              <Text style={styles.brandLocation}>Noordwijk</Text>
-            </View>
-          </View>
-          <View style={styles.headerRight}>
-            <LanguageToggle />
-            <TouchableOpacity style={styles.adminButton} onPress={() => router.push('/admin')}>
-              <Ionicons name="settings-outline" size={20} color="#9CA3AF" />
-            </TouchableOpacity>
-          </View>
-        </View>
-        <View style={styles.statusRow}>
-          <StatusBadge status={data?.status || 'green'} reason={data?.status_reason} reasonParams={data?.status_reason_params} />
-          <TrendIndicator trend={data?.trend || 'stable'} />
-          <RealTimeClock />
-        </View>
-        <Text style={styles.lastUpdate}>{t.lastUpdate}: {formatDate(data?.last_update || null)}</Text>
+        <LanguageToggle />
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#10B981" />}>
+      {/* Hero */}
+      <View style={styles.hero}>
+        <HotelLogo size={90} />
+        <Text style={styles.welcomeText}>{t.welcome}</Text>
+        <Text style={styles.hotelName}>{t.hotelName}</Text>
+        <Text style={styles.selectModeText}>{t.selectMode}</Text>
+      </View>
+
+      {/* Mode Selection */}
+      <View style={styles.modesContainer}>
+        <ModeCard 
+          icon="person"
+          title={t.guestMode}
+          description={t.guestDesc}
+          onPress={() => router.push('/guest')}
+          color="#10B981"
+          highlight={t.guestHighlight}
+        />
         
-        {/* OPERATION - Swipeable Days */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="calendar" size={20} color="#10B981" />
-            <Text style={styles.sectionTitle}>{t.operation.toUpperCase()}</Text>
-            <Text style={styles.swipeHint}>← {language === 'en' ? 'swipe' : 'veeg'} →</Text>
-          </View>
-          <ScrollView ref={dayScrollRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={handleScroll(setCurrentDayIndex)} snapToInterval={CARD_WIDTH} decelerationRate="fast" contentContainerStyle={{ paddingHorizontal: 16 }}>
-            {dayStatsArray.map((stats, i) => <DayCard key={i} dayStats={stats} dayLabel={dayLabels[i]} isToday={i === 2} />)}
-          </ScrollView>
-          <PaginationDots total={5} current={currentDayIndex} />
-        </View>
+        <ModeCard 
+          icon="analytics"
+          title={t.managerMode}
+          description={t.managerDesc}
+          onPress={() => router.push('/manager')}
+          color="#60A5FA"
+          highlight={t.managerHighlight}
+        />
+      </View>
 
-        {/* RADAR */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="radio" size={20} color="#F59E0B" />
-            <Text style={styles.sectionTitle}>{t.radar}</Text>
-            <Text style={styles.sectionSubtitle}>{t.next14Days}</Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}>
-            {data?.radar.map((day, i) => <RadarDayCard key={i} day={day} index={i} />)}
-          </ScrollView>
-          <View style={styles.alertsBox}>
-            <View style={styles.alertsHeader}>
-              <Ionicons name="alert-circle" size={18} color="#F59E0B" />
-              <Text style={styles.alertsTitle}>{t.whatNeedsAttention}</Text>
-            </View>
-            <View style={styles.alertLegend}>
-              <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: '#6B7280' }]} /><Text style={styles.legendText}>{t.todayLabel}</Text></View>
-              <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: '#6B7280' }]} /><Text style={styles.legendText}>{t.nextDays}</Text></View>
-            </View>
-            {data?.alerts.map((a, i) => <AlertItem key={i} alert={a} />)}
-          </View>
-        </View>
-
-        {/* CONTROL */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="analytics" size={20} color="#60A5FA" />
-            <Text style={styles.sectionTitle}>{t.control}</Text>
-            <Text style={styles.swipeHint}>← {language === 'en' ? 'swipe' : 'veeg'} →</Text>
-          </View>
-
-          {/* Charts Swipeable */}
-          <ScrollView ref={chartScrollRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={handleScroll(setCurrentChartIndex)} snapToInterval={CARD_WIDTH} decelerationRate="fast" contentContainerStyle={{ paddingHorizontal: 16 }}>
-            <View style={{ width: CARD_WIDTH }}><WeeklyChart weekData={weekChartData} /></View>
-            <View style={{ width: CARD_WIDTH }}><MonthlyChart monthData={data?.month} /></View>
-          </ScrollView>
-          <PaginationDots total={2} current={currentChartIndex} />
-
-          {/* Week Stats Swipeable */}
-          <Text style={styles.subSectionTitle}>{language === 'en' ? 'Weekly Stats' : 'Weekstatistieken'}</Text>
-          <ScrollView ref={weekScrollRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={handleScroll(setCurrentWeekIndex)} snapToInterval={CARD_WIDTH} decelerationRate="fast" contentContainerStyle={{ paddingHorizontal: 16 }}>
-            {weekOffsets.map((offset, i) => <WeekStatsCard key={i} weekOffset={offset} reservations={reservations} settings={settings} />)}
-          </ScrollView>
-          <PaginationDots total={5} current={currentWeekIndex} />
-
-          {/* Month Stats Swipeable */}
-          <Text style={styles.subSectionTitle}>{language === 'en' ? 'Monthly Stats' : 'Maandstatistieken'}</Text>
-          <ScrollView ref={monthScrollRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={handleScroll(setCurrentMonthIndex)} snapToInterval={CARD_WIDTH} decelerationRate="fast" contentContainerStyle={{ paddingHorizontal: 16 }}>
-            {monthOffsets.map((offset, i) => <MonthStatsCard key={i} monthOffset={offset} reservations={reservations} settings={settings} />)}
-          </ScrollView>
-          <PaginationDots total={6} current={currentMonthIndex} />
-        </View>
-
-        <View style={styles.footerSpacer} />
-      </ScrollView>
+      {/* Footer */}
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>Julianastraat 32, Noordwijk</Text>
+        <Text style={styles.footerText}>• info@badhotelnoordwijk.com</Text>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0B' },
-  loadingContainer: { flex: 1, backgroundColor: '#0A0A0B', justifyContent: 'center', alignItems: 'center' },
-  loadingText: { color: '#9CA3AF', marginTop: 16, fontSize: 14 },
-  header: { backgroundColor: '#111113', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1F1F23' },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  brandContainer: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  brandTextContainer: { flexDirection: 'column' },
-  brandName: { fontSize: 18, fontWeight: '700', color: '#FFFFFF', letterSpacing: -0.5 },
-  brandLocation: { fontSize: 11, color: '#8FAFC4', marginTop: -2 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  adminButton: { padding: 8, borderRadius: 8, backgroundColor: '#1F1F23' },
-  langToggle: { flexDirection: 'row', backgroundColor: '#1F1F23', borderRadius: 6, overflow: 'hidden' },
-  langBtn: { paddingHorizontal: 10, paddingVertical: 6 },
+  header: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20, paddingTop: 12 },
+  langToggle: { flexDirection: 'row', backgroundColor: '#1F1F23', borderRadius: 8, overflow: 'hidden' },
+  langBtn: { paddingHorizontal: 14, paddingVertical: 8 },
   langBtnActive: { backgroundColor: '#10B981' },
-  langBtnText: { fontSize: 11, fontWeight: '600', color: '#6B7280' },
+  langBtnText: { fontSize: 12, fontWeight: '600', color: '#6B7280' },
   langBtnTextActive: { color: '#FFFFFF' },
-  statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 },
-  statusContainer: { flexDirection: 'column', gap: 2 },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, gap: 6 },
-  statusText: { fontSize: 12, fontWeight: '600' },
-  statusReason: { fontSize: 10, marginTop: 2, marginLeft: 4 },
-  trendContainer: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  trendArrow: { fontSize: 16, fontWeight: '700' },
-  trendText: { fontSize: 11, fontWeight: '500' },
-  clockText: { fontSize: 14, fontWeight: '600', color: '#FFFFFF', fontVariant: ['tabular-nums'] },
-  lastUpdate: { fontSize: 11, color: '#6B7280', marginTop: 8 },
-  scrollView: { flex: 1 },
-  scrollContent: { paddingBottom: 40 },
-  section: { paddingVertical: 20, borderBottomWidth: 1, borderBottomColor: '#1F1F23' },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, paddingHorizontal: 16, gap: 8 },
-  sectionTitle: { fontSize: 14, fontWeight: '700', color: '#FFFFFF', letterSpacing: 1 },
-  sectionSubtitle: { fontSize: 12, color: '#6B7280', marginLeft: 'auto' },
-  swipeHint: { fontSize: 11, color: '#6B7280', marginLeft: 'auto' },
-  subSectionTitle: { fontSize: 12, fontWeight: '600', color: '#9CA3AF', paddingHorizontal: 16, marginTop: 20, marginBottom: 12 },
-  paginationContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 12, gap: 6 },
-  paginationDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#374151' },
-  paginationDotActive: { backgroundColor: '#10B981', width: 20 },
-  dayCard: { backgroundColor: '#111113', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#1F1F23' },
-  dayCardLabel: { fontSize: 16, fontWeight: '600', color: '#6B7280', marginBottom: 16, textAlign: 'center' },
-  dayCardLabelToday: { color: '#10B981' },
-  dayCardGrid: { flexDirection: 'row', marginBottom: 16 },
-  dayCardOccupancy: { flex: 1, alignItems: 'center', borderRightWidth: 1, borderRightColor: '#1F1F23', paddingRight: 16 },
-  dayCardOccLabel: { fontSize: 11, color: '#6B7280', marginBottom: 4 },
-  dayCardOccValue: { fontSize: 48, fontWeight: '700', color: '#10B981' },
-  dayCardOccRooms: { fontSize: 12, color: '#9CA3AF', marginTop: 4 },
-  dayCardArrDep: { flex: 1, flexDirection: 'row', paddingLeft: 16 },
-  dayCardArrDepItem: { flex: 1, alignItems: 'center' },
-  dayCardDivider: { width: 1, backgroundColor: '#1F1F23' },
-  dayCardArrDepValue: { fontSize: 28, fontWeight: '700', color: '#FFFFFF', marginTop: 4 },
-  dayCardArrDepLabel: { fontSize: 10, color: '#6B7280', marginTop: 2 },
-  dayCardRevenue: { backgroundColor: '#0A0A0B', borderRadius: 12, padding: 12, marginTop: 8 },
-  dayCardRevTitle: { fontSize: 11, color: '#6B7280', marginBottom: 10, textAlign: 'center' },
-  dayCardRevGrid: { flexDirection: 'row', justifyContent: 'space-around' },
-  dayCardRevItem: { alignItems: 'center' },
-  dayCardRevValue: { fontSize: 14, fontWeight: '600', color: '#FFFFFF', marginTop: 4 },
-  dayCardTax: { fontSize: 10, color: '#6B7280', textAlign: 'center', marginTop: 10 },
-  radarCard: { backgroundColor: '#111113', borderRadius: 10, padding: 12, width: 90, borderWidth: 1, borderColor: '#1F1F23' },
-  radarCardFirst: { backgroundColor: '#1A1A1D' },
-  radarDateContainer: { alignItems: 'center', marginBottom: 8, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#1F1F23' },
-  radarDayName: { fontSize: 10, color: '#6B7280', textTransform: 'uppercase' },
-  radarDayNum: { fontSize: 20, fontWeight: '700', color: '#FFFFFF', marginVertical: 2 },
-  radarMonth: { fontSize: 9, color: '#6B7280' },
-  radarStatsContainer: { alignItems: 'center', gap: 4 },
-  radarOccupancyValue: { fontSize: 18, fontWeight: '700' },
-  radarRoomsValue: { fontSize: 11, color: '#9CA3AF' },
-  radarAdrValue: { fontSize: 10, color: '#60A5FA' },
-  alertsBox: { backgroundColor: '#111113', borderRadius: 12, padding: 16, marginTop: 16, marginHorizontal: 16, borderWidth: 1, borderColor: '#1F1F23' },
-  alertsHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
-  alertsTitle: { fontSize: 13, fontWeight: '600', color: '#FFFFFF' },
-  alertLegend: { flexDirection: 'row', gap: 16, marginBottom: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#1F1F23' },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  legendDot: { width: 6, height: 6, borderRadius: 3 },
-  legendText: { fontSize: 10, color: '#6B7280' },
-  alertItem: { flexDirection: 'row', marginVertical: 8, gap: 12 },
-  alertIndicators: { alignItems: 'center', width: 20 },
-  alertDot: { width: 8, height: 8, borderRadius: 4 },
-  alertDotConnector: { width: 1, height: 8, backgroundColor: '#374151', marginVertical: 2 },
-  alertContent: { flex: 1 },
-  alertText: { fontSize: 13, color: '#D1D5DB', lineHeight: 18 },
-  alertContext: { fontSize: 11, color: '#6B7280', marginTop: 2, fontStyle: 'italic' },
-  chartCard: { backgroundColor: '#111113', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#1F1F23' },
-  chartCardTitle: { fontSize: 14, fontWeight: '600', color: '#FFFFFF', marginBottom: 16 },
-  chartBarsRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end' },
-  chartBarWrapper: { alignItems: 'center' },
-  chartBarCol: { justifyContent: 'flex-end' },
-  chartBar: { width: 24, borderRadius: 6, minHeight: 4 },
-  chartBarLabel: { fontSize: 9, color: '#9CA3AF', marginTop: 8, fontWeight: '600' },
-  chartBarValue: { fontSize: 8, color: '#FFFFFF', marginTop: 4 },
-  weekMonthCard: { backgroundColor: '#111113', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#1F1F23' },
-  controlCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  controlCardTitle: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
-  dateRangeText: { fontSize: 11, color: '#6B7280', marginTop: 2 },
-  monthProgress: { fontSize: 11, color: '#6B7280' },
-  controlStatsRow: { flexDirection: 'row', alignItems: 'center' },
-  controlStat: { flex: 1, alignItems: 'center' },
-  controlStatDivider: { width: 1, height: 30, backgroundColor: '#1F1F23' },
-  controlStatValue: { fontSize: 20, fontWeight: '700', color: '#FFFFFF' },
-  controlStatLabel: { fontSize: 10, color: '#6B7280', marginTop: 4, textAlign: 'center' },
-  projectionBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A1D', borderRadius: 8, padding: 12, marginTop: 12, gap: 8 },
-  projectionText: { fontSize: 12, color: '#9CA3AF', flex: 1 },
-  footerSpacer: { height: 60 },
+  hero: { alignItems: 'center', paddingVertical: 40 },
+  welcomeText: { fontSize: 16, color: '#6B7280', marginTop: 24 },
+  hotelName: { fontSize: 28, fontWeight: '700', color: '#FFFFFF', marginTop: 4 },
+  selectModeText: { fontSize: 14, color: '#9CA3AF', marginTop: 16 },
+  modesContainer: { flex: 1, paddingHorizontal: 20, gap: 16 },
+  modeCard: { backgroundColor: '#111113', borderRadius: 20, padding: 24, borderWidth: 1, borderColor: '#1F1F23', position: 'relative' },
+  modeIconContainer: { width: 72, height: 72, borderRadius: 36, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  modeTitle: { fontSize: 20, fontWeight: '700', color: '#FFFFFF', marginBottom: 8 },
+  modeDescription: { fontSize: 14, color: '#9CA3AF', lineHeight: 20, marginBottom: 12 },
+  highlightBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, alignSelf: 'flex-start' },
+  highlightText: { fontSize: 12, fontWeight: '600' },
+  modeArrow: { position: 'absolute', right: 20, bottom: 20, width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 20, gap: 8 },
+  footerText: { fontSize: 12, color: '#6B7280' },
 });
