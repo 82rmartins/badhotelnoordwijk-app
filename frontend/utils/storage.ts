@@ -27,7 +27,7 @@ export interface HotelSettings {
 }
 
 export const DEFAULT_SETTINGS: HotelSettings = {
-  total_rooms: 26,
+  total_rooms: 24, // 20 double + 2 triple + 2 single
   high_season_target: 85,
   low_season_target: 65,
 };

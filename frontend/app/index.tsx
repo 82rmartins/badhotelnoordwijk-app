@@ -447,8 +447,8 @@ export default function Dashboard() {
   const loadDashboard = useCallback(async () => {
     try {
       const loadedSettings = await loadSettings();
-      if (loadedSettings.total_rooms !== 26) {
-        loadedSettings.total_rooms = 26;
+      if (loadedSettings.total_rooms !== 24) {
+        loadedSettings.total_rooms = 24;
         await saveSettings(loadedSettings);
       }
       setSettingsState(loadedSettings);
