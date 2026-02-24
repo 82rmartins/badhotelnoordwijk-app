@@ -92,7 +92,7 @@ const QuickAction = ({ icon, label, onPress, color = '#10B981' }: { icon: string
     <View style={[styles.quickActionIcon, { backgroundColor: color + '20' }]}>
       <Ionicons name={icon as any} size={28} color={color} />
     </View>
-    <Text style={styles.quickActionLabel}>{label}</Text>
+    <Text style={{ fontSize: 14, fontWeight: '600', color: '#FFFFFF', textAlign: 'center' }}>{label}</Text>
   </TouchableOpacity>
 );
 
