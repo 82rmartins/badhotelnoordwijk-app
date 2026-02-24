@@ -215,6 +215,9 @@ export default function AdminScreen() {
           <TouchableOpacity style={[styles.langBtn, language === 'nl' && styles.langBtnActive]} onPress={() => setLanguage('nl')}>
             <Text style={[styles.langBtnText, language === 'nl' && styles.langBtnTextActive]}>NL</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={[styles.langBtn, language === 'de' && styles.langBtnActive]} onPress={() => setLanguage('de')}>
+            <Text style={[styles.langBtnText, language === 'de' && styles.langBtnTextActive]}>DE</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
