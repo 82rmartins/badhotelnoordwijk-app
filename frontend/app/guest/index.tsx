@@ -206,7 +206,7 @@ export default function GuestHome() {
         </View>
 
         {/* Quick Actions Grid */}
-        <View style={styles.quickActionsGrid}>
+        <View style={styles.quickActionsRow}>
           <QuickAction 
             icon="bed" 
             label={t.yourStay} 
@@ -219,6 +219,8 @@ export default function GuestHome() {
             onPress={() => router.push('/guest/around-you')} 
             color="#60A5FA" 
           />
+        </View>
+        <View style={styles.quickActionsRow}>
           <QuickAction 
             icon="star" 
             label={t.hotelExperience} 
@@ -231,12 +233,15 @@ export default function GuestHome() {
             onPress={() => router.push('/guest/benefits')} 
             color="#A78BFA" 
           />
+        </View>
+        <View style={styles.quickActionsRow}>
           <QuickAction 
             icon="calendar" 
             label={t.bookAgain} 
             onPress={() => router.push('/guest/book-again')} 
             color="#F472B6" 
           />
+          <View style={styles.quickActionPlaceholder} />
         </View>
 
         <View style={styles.footerSpacer} />
