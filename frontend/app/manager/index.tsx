@@ -573,7 +573,7 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [weekChartData, setWeekChartData] = useState<any[]>([]);
   const [dayStatsArray, setDayStatsArray] = useState<DailyStats[]>([]);
-  const [reservations, setReservations] = useState<any[]>([]);
+  const [mewsDataState, setMewsDataState] = useState<MewsReportStore>({ lastUpdate: '', daily: [], weekly: [], monthly: [] });
   const [settings, setSettingsState] = useState(DEFAULT_SETTINGS);
   
   // Swipe indices
