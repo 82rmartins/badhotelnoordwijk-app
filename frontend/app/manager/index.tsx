@@ -456,32 +456,129 @@ export default function Dashboard() {
       }
       setSettingsState(loadedSettings);
       
-      let loadedReservations = await loadReservations();
+      // Load Mews data instead of old reservations
+      const mewsData = await loadMewsData();
       const lastUpdate = await getLastUpdate();
       
-      if (loadedReservations.length === 0) {
-        loadedReservations = generateDemoReservations(loadedSettings);
-        await saveReservations(loadedReservations);
+      console.log('Loaded Mews data:', { 
+        daily: mewsData.daily.length, 
+        weekly: mewsData.weekly.length, 
+        monthly: mewsData.monthly.length 
+      });
+      
+      // Convert Mews data to dashboard format
+      const hasMewsData = mewsData.daily.length > 0 || mewsData.weekly.length > 0 || mewsData.monthly.length > 0;
+      
+      if (hasMewsData) {
+        // Use real Mews data
+        const dashboardData = buildDashboardFromMews(mewsData, loadedSettings, lastUpdate);
+        setData(dashboardData);
+        
+        // Day stats from Mews daily data
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const dayStats: DailyStats[] = [];
+        
+        for (let i = -2; i <= 2; i++) {
+          const d = new Date(today);
+          d.setDate(today.getDate() + i);
+          const dateStr = d.toISOString().split('T')[0];
+          
+          // Find matching day in Mews data
+          const mewsDay = mewsData.daily.find(m => m.date === dateStr);
+          
+          if (mewsDay) {
+            dayStats.push({
+              date: dateStr,
+              occupancy_percent: mewsDay.occupancy,
+              rooms_occupied: mewsDay.occupiedRooms,
+              total_rooms: mewsDay.availableRooms || loadedSettings.total_rooms,
+              arrivals: mewsDay.arrivals,
+              departures: mewsDay.departures,
+              room_revenue: mewsDay.revenue,
+              parking_revenue: 0,
+              vending_revenue: 0,
+              city_tax: 0,
+              adr: mewsDay.adr,
+            });
+          } else {
+            // No data for this day
+            dayStats.push({
+              date: dateStr,
+              occupancy_percent: 0,
+              rooms_occupied: 0,
+              total_rooms: loadedSettings.total_rooms,
+              arrivals: 0,
+              departures: 0,
+              room_revenue: 0,
+              parking_revenue: 0,
+              vending_revenue: 0,
+              city_tax: 0,
+              adr: 0,
+            });
+          }
+        }
+        setDayStatsArray(dayStats);
+        
+        // Weekly chart data from daily data
+        const weekStats = mewsData.daily.slice(0, 7).map(d => ({ 
+          occupancy_percent: d.occupancy || 0 
+        }));
+        setWeekChartData(weekStats.length > 0 ? weekStats : Array(7).fill({ occupancy_percent: 0 }));
+        
+        // Store mews daily data for week/month cards (used instead of reservations)
+        setReservations([]); // Clear old reservations
+        
+      } else {
+        // No Mews data - show empty state with message
+        const emptyData: DashboardData = {
+          status: 'yellow',
+          status_reason: null,
+          status_reason_params: [],
+          trend: 'stable',
+          last_update: lastUpdate,
+          today: {
+            date: new Date().toISOString().split('T')[0],
+            occupancy_percent: 0,
+            rooms_occupied: 0,
+            total_rooms: loadedSettings.total_rooms,
+            arrivals: 0,
+            departures: 0,
+            room_revenue: 0,
+            parking_revenue: 0,
+            vending_revenue: 0,
+            city_tax: 0,
+            adr: 0,
+          },
+          radar: [],
+          alerts: [{
+            type: 'info',
+            message: 'no_data_uploaded',
+            message_params: [],
+            today_status: 'warning',
+            future_status: 'warning',
+            context: 'upload_xlsx_files',
+          }],
+          week: { occupancy_avg: 0, revenue_total: 0, adr_avg: 0 },
+          month: { occupancy_accumulated: 0, revenue_accumulated: 0, days_passed: new Date().getDate(), days_total: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() },
+        };
+        setData(emptyData);
+        setDayStatsArray(Array(5).fill({
+          date: new Date().toISOString().split('T')[0],
+          occupancy_percent: 0,
+          rooms_occupied: 0,
+          total_rooms: loadedSettings.total_rooms,
+          arrivals: 0,
+          departures: 0,
+          room_revenue: 0,
+          parking_revenue: 0,
+          vending_revenue: 0,
+          city_tax: 0,
+          adr: 0,
+        }));
+        setWeekChartData(Array(7).fill({ occupancy_percent: 0 }));
+        setReservations([]);
       }
-      setReservations(loadedReservations);
-      
-      const dashboardData = calculateDashboard(loadedReservations, loadedSettings, lastUpdate);
-      setData(dashboardData);
-      
-      // Day stats for swipeable cards
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const dayStats: DailyStats[] = [];
-      for (let i = -2; i <= 2; i++) {
-        const d = new Date(today);
-        d.setDate(today.getDate() + i);
-        dayStats.push(calculateDailyStats(d, loadedReservations, loadedSettings));
-      }
-      setDayStatsArray(dayStats);
-      
-      // Weekly chart data
-      const weekStats = dashboardData.radar.slice(0, 7).map(r => ({ occupancy_percent: r.occupancy_percent || 0 }));
-      setWeekChartData(weekStats);
       
     } catch (err) {
       console.error('Error loading dashboard:', err);
