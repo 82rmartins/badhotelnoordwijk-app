@@ -86,16 +86,6 @@ const WeatherCard = ({ weather, suggestion, language }: { weather: WeatherData |
   );
 };
 
-// Quick Action Button
-const QuickAction = ({ icon, label, onPress, color = '#10B981' }: { icon: string; label: string; onPress: () => void; color?: string }) => (
-  <TouchableOpacity style={styles.quickAction} onPress={onPress} activeOpacity={0.7}>
-    <View style={[styles.quickActionIcon, { backgroundColor: color + '20' }]}>
-      <Ionicons name={icon as any} size={28} color={color} />
-    </View>
-    <Text style={{ fontSize: 14, fontWeight: '600', color: '#FFFFFF', textAlign: 'center' }}>{label}</Text>
-  </TouchableOpacity>
-);
-
 // Language Toggle
 const LanguageToggle = () => {
   const { language, setLanguage } = useLanguage();
