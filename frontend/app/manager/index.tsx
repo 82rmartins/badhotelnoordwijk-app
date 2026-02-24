@@ -111,15 +111,14 @@ function buildDashboardFromMews(mewsData: MewsReportStore, settings: HotelSettin
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const target = settings.high_season_target;
   
-  // If we have weekly/monthly data, use it for radar
-  // Otherwise show the average for all days
+  // Build radar for next 14 days
   for (let i = 0; i < 14; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
     const dateStr = d.toISOString().split('T')[0];
     
-    // Try to find matching data in any source
-    let dayData = allData.find(m => m.date === dateStr);
+    // Try to find matching data in daily data first
+    let dayData = mewsData.daily.find(m => m.date === dateStr);
     
     // If no exact match, use data from same weekday if we have weekly data
     if (!dayData && mewsData.weekly.length > 0) {
@@ -130,9 +129,9 @@ function buildDashboardFromMews(mewsData: MewsReportStore, settings: HotelSettin
       if (weekDataForDay) dayData = weekDataForDay;
     }
     
-    // Use average if still no data
-    const occ = dayData?.occupancy || avgOcc;
-    const rooms = dayData?.occupiedRooms || Math.round((occ / 100) * settings.total_rooms);
+    // Calculate occupancy with 24 rooms
+    let occupiedRooms = dayData?.occupiedRooms || 0;
+    let occ = occupiedRooms > 0 ? (occupiedRooms / TOTAL_ROOMS) * 100 : avgOcc;
     
     radar.push({
       date: d,
