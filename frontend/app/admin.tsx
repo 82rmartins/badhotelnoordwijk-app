@@ -27,6 +27,7 @@ import {
   DEFAULT_SETTINGS 
 } from '../utils/storage';
 import { parseCSV } from '../utils/csvParser';
+import { parseXLSX } from '../utils/xlsxParser';
 import { generateDemoReservations } from '../utils/calculations';
 import { useLanguage } from '../utils/LanguageContext';
 
