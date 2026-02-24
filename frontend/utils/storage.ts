@@ -135,9 +135,18 @@ export async function loadCachedDashboard(): Promise<any | null> {
   }
 }
 
-// Clear all data
+// Clear all data (both cloud and local)
 export async function clearAllData(): Promise<void> {
   try {
+    // Clear from backend (cloud)
+    try {
+      await fetch(`${API_URL}/api/mews-data`, { method: 'DELETE' });
+      console.log('Cloud data cleared');
+    } catch (apiError) {
+      console.warn('Could not clear cloud data:', apiError);
+    }
+    
+    // Also clear local storage
     await AsyncStorage.multiRemove(Object.values(STORAGE_KEYS));
     console.log('All data cleared successfully');
   } catch (error) {
