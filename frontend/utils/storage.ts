@@ -43,6 +43,8 @@ export interface MewsReportStore {
   daily: MewsDailyData[];
   weekly: MewsDailyData[];
   monthly: MewsDailyData[];
+  arrivals: { date: string; count: number }[];
+  departures: { date: string; count: number }[];
 }
 
 export interface HotelSettings {
