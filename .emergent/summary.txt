@@ -1,234 +1,202 @@
 <analysis>
 
 **original_problem_statement:**
-The user wants to build an internal executive mobile app for the Bad Hotel Noordwijk. The app's primary purpose is to provide a live operations display that allows a user to understand the hotel's status (under control or at risk) in 5 seconds.
+The user initially requested an internal executive mobile app for the Bad Hotel Noordwijk to display live operations data from CSV files. The project has since evolved significantly based on user feedback.
 
-**PRODUCT REQUIREMENTS (V1 - CSV First):**
-- **Architecture:** A standalone Expo/React Native application with no backend dependency. All data processing and calculations must happen on the device.
-- **Data Ingestion:** Data is loaded by an administrator via a CSV file upload screen within the app. The app must be prepared to parse CSVs from the Mews PMS.
-- **Persistence:** Data should be stored on the device (e.g., using AsyncStorage) to allow for offline functionality, showing the last known data snapshot.
-- **Core UI:**
-    - An immersive, vertically scrollable feed-like interface.
-    - **Fixed Header:** Displays the overall hotel status (🟢 Sob Controle / 🟡 Atenção / 🔴 Risco), a trend indicator (↑ Melhorando / → Estável / ↓ Piorando), a live clock, and a Last Update timestamp. A reason for the status should be shown if it's not Under Control.
-    - **Section 1: TODAY (Operation):** A swipeable carousel showing key metrics (occupancy, arrivals/departures, revenue) for Yesterday, Today, and Tomorrow.
-    - **Section 2: RADAR (14 Days):** A visual 14-day forecast of occupancy. It must highlight days that need attention.
-    - **Section 3: CONTROL (Week & Month):** Contains swipeable carousels for:
-        - A weekly/monthly occupancy chart.
-        - Weekly performance stats (swipeable for 5 weeks: -2 past, current, +2 future).
-        - Monthly performance stats (swipeable for 6 months: -2 past, current, +3 future).
-- **Branding & Internationalization:**
-    - Include the hotel logo.
-    - The default language must be **English**.
-    - A language toggle for **English (EN)** and **Dutch (NL)** must be present. All text must be internationalized.
-- **Hotel Configuration:** The total number of rooms is fixed at **26**. All calculations must be based on this number.
+The new, overarching goal is to extend the existing application to have two distinct modes:
+1.  **Manager Mode:** The original internal dashboard, protected by a login, for hotel management to view operational KPIs. This mode needs to be updated to process data from  files provided by the user.
+2.  **Guest Mode:** A new, public-facing section of the app for hotel guests, accessible via a QR code without a login. This mode should provide helpful information about the hotel, its amenities, and the local area.
+
+**PRODUCT REQUIREMENTS (Guest Mode):**
+-   **Architecture:** A single Expo/React Native app with two routes:  (protected) and  (public).
+-   **Home Screen ():** A clean UI with the hotel logo, a Today at BAD Hotel card (with weather and a daily tip), and large icon-based buttons for navigation to other sections.
+-   **Your Stay:** A screen with essential guest information: Wi-Fi details, check-in/out times, facility information (gym, kitchen, laundry), house rules, and quick contact buttons (Call, WhatsApp, Emergency).
+-   **Around You:** An interactive map (using Google Maps) with curated pins for nearby points of interest (restaurants, supermarkets, beach, etc.), with each pin linking to open in the native maps app.
+-   **Hotel Experience:** Cards highlighting hotel features like the gym, common areas, terrace, etc.
+-   **Benefits:** A section displaying guest-only perks, like a discount on the next booking.
+-   **Book Again:** A direct link to the hotel's official booking website.
+-   **Branding & I18n:** Use the hotel's branding. Support three languages: English (EN), Dutch (NL), and German (DE).
+
+**PRODUCT REQUIREMENTS (Manager Mode):**
+-   **Data Ingestion:** Must be able to process three separate  files (daily, weekly, monthly) uploaded by an admin.
+-   **Data Handling:** Each new upload of files must **completely replace** the old data, not append to it. The Clear All Data function must work reliably.
+-   **Dashboard:** All metrics on the dashboard (Occupancy, Revenue, Radar, etc.) must be calculated and displayed based on the most recently uploaded XLSX data.
 
 **User's preferred language**: Portuguese (pt-BR). The next agent MUST respond in Portuguese.
 
 **what currently exists?**
-A fully client-side Expo/React Native application that aligns with the CSV-first architecture. The backend (, ) has been removed. The app features:
-- A main dashboard () and an admin panel ().
-- All data processing logic is in .
-- Data persistence is handled by  using AsyncStorage.
-- Internationalization (i18n) for English and Dutch is implemented via  and .
-- The UI includes the three main sections (Today, Radar, Control) and incorporates the requested logo, status indicators, and a custom-built bar chart.
-- Swipeable carousels for the Today section and the charts were partially implemented but were buggy. The agent was in the process of a major rewrite to implement swipe for all requested sections when the session ended.
+The application has been significantly refactored into a single Expo app using  to manage two distinct modes:
+-   **Guest Mode ():** The UI for all requested Guest Mode screens (, , , etc.) has been built. Internationalization for EN, NL, and DE is implemented with a 3-way language toggle.
+-   **Manager Mode ():** The original dashboard UI exists. An  screen is available for file uploads. A login screen and  have been created but the authentication logic (email whitelist) is not yet implemented.
+-   **Data Pipeline:** The core data pipeline is **broken and in a half-refactored state**. The user is extremely frustrated because uploading new  files causes data to be duplicated instead of replaced, and the Manager Mode dashboard does not reflect the updated data. A  button exists but is not functional. The previous agent started a major refactor to fix this but did not complete it.
 
 **Last working item**:
-- **Last item agent was working:** Implementing swipeable carousels (using  with ) for the **Current Week** and **Current Month** sections within the  block. The user requested the ability to swipe left/right to see past and future weeks/months.
-- **Status:** IN PROGRESS
-- **Agent Testing Done:** N
-- **Which testing method agent to use?** screenshot tool. The next agent should use the screenshot tool to visually verify if the complex swipe UI for the Week and Month carousels is rendering and functioning correctly.
-- **User Testing Done:** N
+-   **Last item agent was working:** A complete overhaul of the data ingestion and processing pipeline for the Manager Mode. The agent was trying to:
+    1.  Create new storage functions (, , ) in  to handle raw report data instead of processed reservations.
+    2.  Update  to correctly parse the user-provided Mews XLSX reports into a structured  object.
+    3.  Rewrite the upload logic in  to clear old data and save the new  object upon successful upload of multiple files.
+    4.  Update the  dashboard to fetch data using  and derive its metrics from this new data structure.
+-   **Status:** IN PROGRESS
+-   **Agent Testing Done:** N
+-   **Which testing method agent to use?** manual testing by curl. The agent should first complete the refactor. Then, the primary test is to:
+    1. Go to the  page.
+    2. Click Clear All Data and verify data is cleared.
+    3. Upload the user's three XLSX files.
+    4. Navigate to  and verify with the screenshot tool that the dashboard KPIs (e.g., occupancy) match the data in the uploaded files.
+-   **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
-  - **Issue 1:** The implementation of swipeable carousels for the weekly and monthly statistics is incomplete and unverified. (Priority: P0)
+-   **Issue 1:** The data pipeline is fundamentally broken, causing user frustration. (Priority: P0)
+-   **Issue 2:** Multi-file upload is not fully functional or user-friendly on mobile devices. (Priority: P1)
+-   **Issue 3:** Links to external maps in the Around You screen are not working. (Priority: P2)
 
-  **Issues Detail:**
-  - **Issue 1:**
-     - **Attempted fixes:** The agent performed a complete overwrite of  to add state and logic for managing the active week and month indices for the carousels. The code also includes new components (, ) to render the slidable content. However, the session ended immediately after the file write, before any testing or debugging. Previous attempts at simpler swipe features introduced data loading bugs, so it's highly probable this more complex version is also broken.
-     - **Next debug checklist:**
-         1.  Restart the 
-  Usage: expo [command] [options]
+**Issues Detail:**
+-   **Issue 1:** The Data Pipeline is Broken
+    -   **Description:** The user is experiencing three critical failures: 1) Uploading new XLSX files **appends** data instead of **replacing** it, leading to inflated and incorrect numbers. 2) The Clear All Data button in the admin panel does not work. 3) Consequently, the Manager dashboard never displays the correct, up-to-date information from the reports, which is its primary purpose.
+    -   **Attempted fixes:** The previous agent started a major refactor to create a new, parallel data pipeline. This involved creating new functions in  (, ) and a new parser in . The work was left incomplete across , , and . The code is currently in a broken, half-migrated state.
+    -   **Next debug checklist:**
+        1.  **Finalize :** Ensure  correctly saves the parsed data object and  retrieves it. Critically, ensure  **deletes all relevant keys** (, and the old  key for good measure).
+        2.  **Fix :**
+            -   Connect the Clear All Data button to the  function from  and ensure it provides user feedback (e.g., an ).
+            -   In the file upload handler (), ensure it **first calls ** before processing and saving the new files with . This is the key to preventing duplication.
+        3.  **Complete  Refactor:**
+            -   Change the main  data loading hook to call .
+            -   Adapt ALL component logic and calculations (for Today, Radar, and Control sections) to read from the new  object structure, completely removing any dependency on the old  array and .
+    -   **Why fix this issue and what will be achieved with the fix?** This is the user's #1 complaint and the core function of the Manager Mode. Fixing it will make the app usable for its intended purpose and resolve the user's main source of frustration.
+    -   **Status:** IN PROGRESS
+    -   **Is recurring issue?** Y
+    -   **Should Test frontend/backend/both after fix?** Frontend
+    -   **Blocked on other issue:** None
 
-  Options:
-  
-    -V, --version                     output the version number
-    --non-interactive                 Fail, if an interactive prompt would be required to continue.
-    -h, --help                        output usage information
-  
-  Commands:
+-   **Issue 2:** Mobile Multi-File Upload Experience is Poor
+    -   **Description:** The user reported that uploading files via Expo Go is failing and that they need to select all three reports (daily, weekly, monthly) at once. The current implementation only allows selecting multiple files on the web. The mobile experience is broken.
+    -   **Attempted fixes:** The agent focused on fixing the data backend and web upload, but did not implement a robust mobile multi-file selection UI.
+    -   **Next debug checklist:**
+        1.  Investigate why  with  is failing on mobile, as reported by the user (Could not read Excel file). The issue might be in how the file URI is read ( vs. ).
+        2.  If direct multi-select is unreliable, implement a file queue UI in  where the user can tap a button to add files one-by-one to a list before initiating a single upload process for all queued files.
+    -   **Why fix this issue and what will be achieved with the fix?** The user's daily workflow involves uploading 3 files from a mobile device. This must be a smooth and reliable process.
+    -   **Status:** NOT STARTED
+    -   **Is recurring issue?** Y
+    -   **Should Test frontend/backend/both after fix?** Frontend
+    -   **Blocked on other issue:** Issue 1
 
-    init [name]                       Create a new Expo project
-    start [path]                      Start a local dev server for the app
-    start:web [path]                  Start a Webpack dev server for the web app
-    export [path]                     Export the static files of the app for hosting it on a web server
-    install [packages...]             Install a module or other package to a project
-    run:android [path]                Run the Android app binary locally
-    run:ios [path]                    Run the iOS app binary locally
-    send [path]                       Share the project's URL to an email address
-
-    login                             Login to an Expo account
-    logout                            Logout of an Expo account
-    register                          Sign up for a new Expo account
-    whoami                            Return the currently authenticated account
-
-    client:install:ios                Install Expo Go for iOS on the simulator
-    client:install:android            Install Expo Go for Android on a connected device or emulator
-
-    config [path]                     Show the project config
-    doctor [path]                     Diagnose issues with the project
-    upgrade [sdk-version]             Upgrade the project packages and config for the given SDK version
-
-    customize:web [path]              Eject the default web files for customization
-    prebuild [path]                   Create native iOS and Android project files before building natively.
-                                      Learn more: https://docs.expo.dev/workflow/customizing/
-
-    build:web [path]                  Build the web app for production
-
-    credentials:manager [path]        Superseded by eas credentials in eas-cli
-
-    url [path]                        Log a URL for opening the project in Expo Go
-    url:ipa [path]                    Log the download URL for the standalone iOS binary
-    url:apk [path]                    Log the download URL for the standalone Android binary
-
-    webhooks [path]                   List all webhooks for a project
-    webhooks:add [path]               Add a webhook to a project
-    webhooks:remove [path]            Delete a webhook
-    webhooks:update [path]            Update an existing webhook
-
-    build:ios [path]                  Superseded by eas build in eas-cli
-    build:android [path]              Superseded by eas build in eas-cli
-    build:status [path]               Superseded by eas build:list in eas-cli
-    eject [path]                      Superseded by expo prebuild
-    fetch:ios:certs [path]            Superseded by eas credentials in eas-cli
-    fetch:android:keystore [path]     Superseded by eas credentials in eas-cli
-    fetch:android:hashes [path]       Superseded by eas credentials in eas-cli
-    fetch:android:upload-cert [path]  Superseded by eas credentials in eas-cli
-    publish [path]                    Superseded by eas update in eas-cli
-    publish:set [path]                Superseded by eas update:republish in eas-cli
-    publish:rollback [path]           Superseded by eas update:republish in eas-cli
-    publish:history [path]            Superseded by eas update:list in eas-cli
-    publish:details [path]            Superseded by eas update:view in eas-cli
-    push:android:upload [path]        Superseded by eas credentials in eas-cli
-    push:android:show [path]          Superseded by eas credentials in eas-cli
-    push:android:clear [path]         Superseded by eas credentials in eas-cli
-    upload:android [path]             Superseded by eas submit in eas-cli
-    upload:ios [path]                 Superseded by eas submit in eas-cli
-    client:ios [path]                 Superseded by Expo Dev Clients
-
-[10:52:06]   Run a command with --help for more info 💡
-[10:52:06]     $ expo start --help
-[10:52:06] server.
-         2.  Use the  tool to view the main dashboard.
-         3.  Check if the CONTROL section renders correctly.
-         4.  Attempt to swipe the Current Week and Current Month cards.
-         5.  Inspect the UI for visual bugs (e.g., missing data, incorrect layout, non-functional swipe).
-         6.  Check the application logs for any runtime errors related to state management (, ) or data fetching for the new cards in .
-     - **Why fix this issue and what will be achieved with the fix?** This is a direct feature request from the user to enhance the interactivity of the dashboard. Fixing it will complete the user's latest set of requirements.
-     - **Status:** IN PROGRESS
-     - **Is recurring issue?** Y (The agent struggled with data loading in swipeable components previously).
-     - **Should Test frontend/backend/both after fix?** Frontend
-     - **Blocked on other issue:** None
+-   **Issue 3:** Around You Map Links Are Broken
+    -   **Description:** The user reported that clicking on a place in the Around You section does not open the location in Google Maps.
+    -   **Attempted fixes:** The agent modified the  call in .
+    -   **Next debug checklist:**
+        1.  Review the  function in .
+        2.  Ensure the generated URL is correctly formatted for both iOS (Apple Maps) and Android (Google Maps), including the latitude and longitude.  should be used.
+        3.  Test the functionality using Expo Go on a real device, as  works differently in a web preview.
+    -   **Why fix this issue and what will be achieved with the fix?** This is a key feature of the Guest Mode, providing real-world value to hotel guests.
+    -   **Status:** TESTING PENDING
+    -   **Is recurring issue?** N
+    -   **Should Test frontend/backend/both after fix?** Frontend
+    -   **Blocked on other issue:** None
 
 **In progress Task List**:
-  - **Task 1:** Debug and finalize the swipeable carousels for weekly and monthly statistics.
-     - **Where to resume:** . The entire logic for this feature is within this file.
-     - **What will be achieved with this?** The CONTROL section will become interactive, allowing the user to browse through past and future performance data for weeks and months, fulfilling a key feature request.
-     - **Status:** IN PROGRESS
-     - **Should Test frontend/backend/both after fix?** Frontend
-     - **Blocked on something:** None
+-   **Task 1:** Complete the Data Pipeline Refactor
+    -   **Where to resume:** Across , , , and . The core logic change is to stop using the old  array and use a new, structured  object that is replaced on every upload.
+    -   **What will be achieved with this?** The Manager Mode will finally show correct, up-to-date data based on the user's daily XLSX report uploads, resolving their main complaint.
+    -   **Status:** IN PROGRESS
+    -   **Should Test frontend/backend/both after fix?** Frontend
+    -   **Blocked on something:** None
 
 **Upcoming and Future Tasks**
-- **Upcoming Tasks:**
-  - **P0:** User validation with real CSV data. The app is structurally complete, but the user needs to upload actual reports from Mews to validate all calculations and the overall user experience. The agent should be prepared to assist with debugging any parsing or calculation errors that arise from the real data.
+-   **P0: Implement Manager Authentication:** Implement the login logic in  using the  context. This should involve checking if the entered email exists in a hardcoded whitelist of authorized emails, as requested by the user. The user will provide the list of emails later.
+-   **P1: Implement Weather API:** The user approved using a free weather API for the Guest Mode home screen. This requires getting an API key (or using a keyless one), fetching the data, and displaying it in .
 
 **Completed work in this session**
-- **List of all completed tasks with file and method name:**
-  - **Architecture Pivot:** Migrated from a FastAPI/MongoDB backend to a client-side-only, CSV-first architecture. (Removed , created , ).
-  - **Internationalization (i18n):** Implemented English and Dutch languages with a toggle. (Created , , updated ).
-  - **Hotel Configuration Update:** Changed total rooms from 24 to 26. (Updated ).
-  - **Custom Chart:** Replaced a problematic charting library with a custom-built, simple bar chart for weekly occupancy. (Modified ).
-  - **Bug Fix - Caching & Translation:** Resolved a critical bug where old data (with 24 rooms and hardcoded Portuguese text) was being displayed due to caching. The fix forces a data recalculation if settings are outdated. (Modified ).
-  - **Bug Fix - Translation:** Fixed hardcoded Portuguese alert messages by moving to a key-based translation system. (Modified , , ).
-  - **UI Enhancements:** Added a simulated hotel logo and refined the UI layout. (Modified ).
-  - **Initial Swipe Feature:** Implemented a swipeable carousel for the Today section (though it was buggy and rewritten multiple times).
+-   **Architecture Refactor:** Restructured the entire application from a single-page dashboard to a two-mode app (Guest & Manager) using .
+-   **Guest Mode UI Implementation:** Built all the required screens for the Guest Mode as per the user's detailed specifications.
+-   **Internationalization (i18n):** Added support for three languages (English, Dutch, German) with UI toggles across all relevant screens.
+-   **Guest Mode Content:** Updated the Your Stay page with specific contact numbers and Wi-Fi information provided by the user.
+-   **XLSX Support:** Added the  library and created an initial parser () to handle the user's Mews reports.
+-   **Web Upload Fix:** Implemented a platform-specific fallback for file uploads in the web preview using a native HTML input.
+-   **UI Bug Squashing:** Fixed numerous layout and styling bugs in the Guest Mode UI, particularly on the home screen buttons and Around You filters.
 
 **Earlier issues found/mentioned but not fixed**
-   - None. All issues reported by the user were addressed, although the final implementation is still in progress.
+-   See All Pending/In progress Issue list. The core issues of the broken data pipeline, mobile file upload, and map links were all raised by the user but are not yet resolved.
 
 **Known issue recurrence from previous fork**
-  - **Issue:** Data not loading correctly inside swipeable/carousel components.
-  - **Details:** When implementing the swipe feature for the Today card, the agent faced issues where the card content would be blank or show partial data. The root cause was related to data being  on the initial render or state updates not triggering a re-render correctly. This is likely to recur in the more complex Week/Month carousels just implemented.
-  - **Status:** RECURRING
+-   Not applicable, as this fork's major issues are new.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
-- **Framework:** Expo (React Native)
-- **Architecture:** Client-side only (CSV-first), offline-capable.
-- **State Management:** React Hooks (, , , ).
-- **Data Storage:**  for persisting reservations and settings locally on the device.
-- **Data Parsing:**  for handling CSV files.
-- **Internationalization:**  and  for English/Dutch translations.
-- **UI:** Custom components built with React Native's , , . Use of  with  to create swipeable carousels.
+-   **Framework:** Expo (React Native)
+-   **Routing:**  for file-based routing between Guest and Manager modes.
+-   **State Management:** React Hooks (, , ). A custom  for i18n and  for authentication.
+-   **Data Storage:** . Being refactored to store a single  object instead of a  array.
+-   **Data Parsing:**  library for parsing user-provided Mews reports.  for file selection.
+-   **Internationalization:**  and .
 
 **key DB schema**
-- N/A. Database was removed. Data is stored as JSON objects in AsyncStorage. The main keys are  and .
+-   N/A. Client-side storage only. The main key in AsyncStorage is changing from  to .
 
 **changes in tech stack**
-- The entire backend stack (FastAPI, MongoDB) was removed in favor of a 100% client-side solution.
+-    was added for routing.
+-    was added for file parsing.
 
 **All files of reference**
-- : **(CRITICAL)** The main file containing almost all the UI, state management, and interaction logic for the dashboard. It was just completely overwritten and is likely buggy.
-- : Contains all the core business logic for calculating hotel statistics.
-- : Contains all translation strings for EN and NL.
-- : Handles saving and loading data from the device's local storage.
-- : The screen for uploading CSV files and managing settings.
+-   : **(CRITICAL & BROKEN)** Contains the file upload logic that needs to be fixed to clear data before saving.
+-   : **(CRITICAL & BROKEN)** The dashboard that needs to be refactored to consume data from the new storage system.
+-   : **(CRITICAL & BROKEN)** The storage utility that is mid-refactor. , , and  must be finalized.
+-   : **(CRITICAL & BROKEN)** The parser that transforms XLSX files into a a structured object. This needs to be finalized and confirmed to work correctly.
+-   : Contains the broken Open in Maps link.
+-   : The login screen where the email whitelist logic needs to be added.
+
+**Areas that need refactoring**:
+-   The entire data pipeline (, , , ) is the highest priority for refactoring.
+-   The old  file is now deprecated and should eventually be removed once  is fully migrated to the new data source.
+
+**key api endpoints**
+- N/A
 
 **Critical Info for New Agent**
-- The project's architecture was pivoted from full-stack to **client-side only** at the user's request. Do not re-introduce any backend dependencies. The user values offline capability and simplicity for V1.
-- The user's primary language is **Portuguese (pt-BR)**. All communication must be in this language.
-- The most recent change was a major rewrite of  to implement complex, nested swipeable carousels. This feature is **untested and likely broken**. This is the immediate priority.
-- Be cautious of stale data. A caching issue was fixed by forcing a data recalculation on app load if settings (like ) are outdated. This logic is in 's .
+-   **USER IS FRUSTRATED.** The user has repeatedly reported the same critical bug: the Manager dashboard does not update with the data from their uploaded files. They feel they are spending money without seeing progress on the most important feature. Your absolute first priority is to fix the data pipeline (clear data on upload, replace, and display correctly).
+-   **THE APP IS IN A BROKEN STATE.** The previous agent left the code in the middle of a major refactor. Do not assume the current code works. You must complete the refactor of the data pipeline across , , , and .
+-   **The workflow is:** User uploads 3 XLSX files daily -> data should be WIPED and REPLACED -> Manager dashboard should show new data. This is the flow you must achieve.
+-   Communicate clearly and in Portuguese. Acknowledge the user's frustration and confirm your plan to fix the core data issue first.
 
 **documents created in this job**
-- None.
+- /app/frontend/utils/xlsxParser.ts
+- /app/frontend/utils/AuthContext.tsx
+- Multiple new screen files under 
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User (Msg 314):** Praises the app (top, top, top) and requests more swipe features for the Control section: a 5-week carousel for Current Week and a 6-month carousel for Month.
-2.  **Agent (Msg 315):** Acknowledges the request and confirms the plan to implement it.
-3.  **Agent (Msg 318-322):** Overwrites  with the new, complex swipe logic.
-4.  **User (Msg 323):** Repeats the same request from message 314.
-5.  **Agent (Msg 324):** Acknowledges the repeated request, states it has been implemented, and is restarting the server to test. The history ends here.
-6.  **User (Msg 308):** Informs the agent that they will provide the real CSV files tomorrow and that the agent should focus on getting the UI/features correct, not the specific data values.
-7.  **Agent (Msg 309, 312, 313):** Acknowledges the user's plan, summarizes the app's readiness, and tells the user how to upload the CSVs tomorrow.
-8.  **User (Msg 275):** Loves the progress but requests two new swipe-based features: a daily carousel for the Today section and a weekly/monthly carousel for the charts.
-9.  **Agent (Msg 276):** Enthusiastically agrees to implement the new swipe features.
-10. **User (Msg 236):** Reports three bugs with screenshots: room count is wrong (24 instead of 26), an alert message is not translated, and the chart is not visible.
+1.  **User (Msg 384, 387):** Very frustrated. Reports that data is duplicating on upload,  doesn't work, and the manager dashboard is not updating with correct info. Asks why this is happening for the third time and feels money is being wasted. Asks if they should clear data daily.
+2.  **User (Msg 324):** Reports file upload fails on both web and Expo Go with an Excel file could not be read error. Also requests the ability to upload multiple files at once.
+3.  **User (Msg 255):** Reports that the German language option is missing from the main selector screen and the manager mode screen. Also reports the XLSX upload is not working in the web preview and asks for an explanation of Expo Go.
+4.  **User (Msg 188):** Huge feedback message. Requests adding German, provides correct Wi-Fi/contact info, reports Around You map links are broken, and most importantly, asks for the manager dashboard to be updated with the real XLSX data they provided.
+5.  **User (Msg 19):** Key clarification: set rooms to 24, use free weather API, use Google Maps, and use an email whitelist for manager login.
+6.  **User (Msg 5):** The pivotal message where the user introduces the entire Guest Mode concept, provides a detailed PRD, and uploads the initial XLSX files.
 
 **Project Health Check:**
-- **Broken:** The Current Week and Current Month swipe features in  are likely broken or buggy as they were just implemented and not tested.
-- **Mocked:** The app uses a demo data generator ( in ) until the user uploads a real CSV.
+-   **Broken:** The entire data ingestion and processing pipeline for the Manager Mode is non-functional.
+-   **Mocked:** The Manager Mode currently falls back to demo data () because the real data pipeline is broken. The Guest Mode weather is also simulated.
 
 **3rd Party Integrations**
-- : For parsing CSV files.
--  / : For internationalization.
-- : For local device storage.
-- : To allow the user to select a CSV file.
-- : For reading the selected file's content.
-- : For UI icons.
+-   : For local device storage.
+-   : For file selection.
+-   : For reading file content.
+-    / : For internationalization.
+-   : For parsing  files.
+-   : For file-based routing.
 
 **Testing status**
-  - Testing agent used after significant changes: NO
-  - Troubleshoot agent used after agent stuck in loop: NO
-  - Test files created: None
-  - Known regressions: None
+-   Testing agent used after significant changes: NO
+-   Troubleshoot agent used after agent stuck in loop: NO
+-   Test files created: None
+-   Known regressions: The entire data upload functionality is a regression.
 
 **Credentials to test flow:**
 - N/A
 
 **What agent forgot to execute**
-- The agent did not test or verify the final, most complex implementation of the swipeable carousels for the Week and Month views in . The session ended immediately after writing the code, leaving it in an unknown state.
+- The agent failed to complete the critical refactor of the data pipeline, leaving the application in a broken and unusable state for the user's primary workflow.
+- The agent did not implement the email whitelist authentication for the manager login.
+- The agent did not fully resolve the multi-file upload issue on mobile devices.
+- The agent did not fix the Open in Maps functionality.
 
 </analysis>
