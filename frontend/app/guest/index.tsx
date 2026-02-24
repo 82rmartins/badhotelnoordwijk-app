@@ -205,43 +205,42 @@ export default function GuestHome() {
           <Text style={styles.coffeeBannerText}>{t.freeWifi}</Text>
         </View>
 
-        {/* Quick Actions Grid */}
-        <View style={styles.quickActionsRow}>
-          <QuickAction 
-            icon="bed" 
-            label={t.yourStay} 
-            onPress={() => router.push('/guest/your-stay')} 
-            color="#10B981" 
-          />
-          <QuickAction 
-            icon="map" 
-            label={t.aroundYou} 
-            onPress={() => router.push('/guest/around-you')} 
-            color="#60A5FA" 
-          />
-        </View>
-        <View style={styles.quickActionsRow}>
-          <QuickAction 
-            icon="star" 
-            label={t.hotelExperience} 
-            onPress={() => router.push('/guest/experience')} 
-            color="#F59E0B" 
-          />
-          <QuickAction 
-            icon="gift" 
-            label={t.benefits} 
-            onPress={() => router.push('/guest/benefits')} 
-            color="#A78BFA" 
-          />
-        </View>
-        <View style={styles.quickActionsRow}>
-          <QuickAction 
-            icon="calendar" 
-            label={t.bookAgain} 
-            onPress={() => router.push('/guest/book-again')} 
-            color="#F472B6" 
-          />
-          <View style={styles.quickActionPlaceholder} />
+        {/* Quick Actions */}
+        <View style={styles.quickActionsContainer}>
+          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/guest/your-stay')}>
+            <View style={[styles.quickActionIconBox, { backgroundColor: 'rgba(16, 185, 129, 0.2)' }]}>
+              <Ionicons name="bed" size={28} color="#10B981" />
+            </View>
+            <Text style={styles.quickActionText}>{t.yourStay}</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/guest/around-you')}>
+            <View style={[styles.quickActionIconBox, { backgroundColor: 'rgba(96, 165, 250, 0.2)' }]}>
+              <Ionicons name="map" size={28} color="#60A5FA" />
+            </View>
+            <Text style={styles.quickActionText}>{t.aroundYou}</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/guest/experience')}>
+            <View style={[styles.quickActionIconBox, { backgroundColor: 'rgba(245, 158, 11, 0.2)' }]}>
+              <Ionicons name="star" size={28} color="#F59E0B" />
+            </View>
+            <Text style={styles.quickActionText}>{t.hotelExperience}</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/guest/benefits')}>
+            <View style={[styles.quickActionIconBox, { backgroundColor: 'rgba(167, 139, 250, 0.2)' }]}>
+              <Ionicons name="gift" size={28} color="#A78BFA" />
+            </View>
+            <Text style={styles.quickActionText}>{t.benefits}</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.quickActionCard} onPress={() => router.push('/guest/book-again')}>
+            <View style={[styles.quickActionIconBox, { backgroundColor: 'rgba(244, 114, 182, 0.2)' }]}>
+              <Ionicons name="calendar" size={28} color="#F472B6" />
+            </View>
+            <Text style={styles.quickActionText}>{t.bookAgain}</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.footerSpacer} />
