@@ -201,13 +201,52 @@ export async function saveMewsData(data: Partial<MewsReportStore>): Promise<void
   }
 }
 
-// NEW: Load Mews report data
+// NEW: Load Mews report data from CLOUD (MongoDB via backend API)
 export async function loadMewsData(): Promise<MewsReportStore> {
+  const emptyData: MewsReportStore = { 
+    lastUpdate: '', 
+    daily: [], 
+    weekly: [], 
+    monthly: [], 
+    arrivals: [], 
+    departures: [] 
+  };
+  
   try {
+    // Try to load from backend (cloud storage) first
+    try {
+      const response = await fetch(`${API_URL}/api/mews-data`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Mews data loaded from cloud:', { 
+          daily: data.daily?.length || 0, 
+          weekly: data.weekly?.length || 0, 
+          monthly: data.monthly?.length || 0 
+        });
+        
+        // Ensure all fields exist
+        return {
+          lastUpdate: data.lastUpdate || '',
+          daily: data.daily || [],
+          weekly: data.weekly || [],
+          monthly: data.monthly || [],
+          arrivals: data.arrivals || [],
+          departures: data.departures || [],
+        };
+      }
+    } catch (apiError) {
+      console.warn('API not available, loading from local storage:', apiError);
+    }
+    
+    // Fallback to local storage
     const data = await AsyncStorage.getItem(STORAGE_KEYS.MEWS_DATA);
     if (data) {
       const parsed = JSON.parse(data);
-      // Ensure all fields exist for backward compatibility
+      console.log('Mews data loaded from local:', { 
+        daily: parsed.daily?.length || 0, 
+        weekly: parsed.weekly?.length || 0, 
+        monthly: parsed.monthly?.length || 0 
+      });
       return {
         lastUpdate: parsed.lastUpdate || '',
         daily: parsed.daily || [],
@@ -217,10 +256,10 @@ export async function loadMewsData(): Promise<MewsReportStore> {
         departures: parsed.departures || [],
       };
     }
-    return { lastUpdate: '', daily: [], weekly: [], monthly: [], arrivals: [], departures: [] };
+    return emptyData;
   } catch (error) {
     console.error('Error loading Mews data:', error);
-    return { lastUpdate: '', daily: [], weekly: [], monthly: [], arrivals: [], departures: [] };
+    return emptyData;
   }
 }
 
