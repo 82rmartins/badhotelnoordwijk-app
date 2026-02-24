@@ -528,17 +528,22 @@ const MonthStatsCard = ({ monthOffset, mewsData, settings }: { monthOffset: numb
   const isCurrentMonth = monthOffset === 0;
   const daysToCalc = isCurrentMonth ? new Date().getDate() : daysInMonth;
 
-  // Calculate month stats
-  let totalOcc = 0, totalRev = 0;
+  // Calculate month stats from Mews data
+  let totalOcc = 0, totalRev = 0, daysWithData = 0;
   for (let i = 0; i < daysToCalc; i++) {
     const d = new Date(targetMonth);
     d.setDate(i + 1);
-    const stats = calculateDailyStats(d, reservations, settings);
-    totalOcc += stats.occupancy_percent;
-    totalRev += stats.room_revenue + stats.parking_revenue + stats.vending_revenue;
+    const dateStr = d.toISOString().split('T')[0];
+    const dayData = mewsData.daily.find(m => m.date === dateStr);
+    
+    if (dayData) {
+      totalOcc += dayData.occupancy;
+      totalRev += dayData.revenue;
+      daysWithData++;
+    }
   }
 
-  const avgOcc = daysToCalc > 0 ? totalOcc / daysToCalc : 0;
+  const avgOcc = daysWithData > 0 ? totalOcc / daysWithData : 0;
   const fmt = (v: number) => `€${v.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`;
 
   return (
