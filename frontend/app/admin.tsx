@@ -41,6 +41,7 @@ export default function AdminScreen() {
   const [settings, setSettings] = useState<HotelSettings>(DEFAULT_SETTINGS);
   const [lastUpdate, setLastUpdate] = useState<string | null>(null);
   const [reservationCount, setReservationCount] = useState(0);
+  const [dataDetails, setDataDetails] = useState({ daily: 0, weekly: 0, monthly: 0 });
   const router = useRouter();
   const { t, language, setLanguage } = useLanguage();
 
@@ -60,6 +61,12 @@ export default function AdminScreen() {
       // Count total periods from Mews data
       const totalPeriods = mewsData.daily.length + mewsData.weekly.length + mewsData.monthly.length;
       setReservationCount(totalPeriods);
+      setDataDetails({
+        daily: mewsData.daily.length,
+        weekly: mewsData.weekly.length,
+        monthly: mewsData.monthly.length,
+      });
+      console.log('Current Mews data:', { daily: mewsData.daily.length, weekly: mewsData.weekly.length, monthly: mewsData.monthly.length });
     } catch (error) {
       console.error('Error loading data:', error);
     }
