@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
   placeIconContainer: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
   placeInfo: { flex: 1, marginLeft: 14 },
   placeName: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
-  placeCategory: { fontSize: 12, color: '#6B7280', marginTop: 2, textTransform: 'capitalize' },
+  placeAddress: { fontSize: 12, color: '#6B7280', marginTop: 2 },
   placeAction: { padding: 8 },
   footerSpacer: { height: 40 },
 });
