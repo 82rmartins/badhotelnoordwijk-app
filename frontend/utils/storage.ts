@@ -176,12 +176,21 @@ export async function loadMewsData(): Promise<MewsReportStore> {
   try {
     const data = await AsyncStorage.getItem(STORAGE_KEYS.MEWS_DATA);
     if (data) {
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      // Ensure all fields exist for backward compatibility
+      return {
+        lastUpdate: parsed.lastUpdate || '',
+        daily: parsed.daily || [],
+        weekly: parsed.weekly || [],
+        monthly: parsed.monthly || [],
+        arrivals: parsed.arrivals || [],
+        departures: parsed.departures || [],
+      };
     }
-    return { lastUpdate: '', daily: [], weekly: [], monthly: [] };
+    return { lastUpdate: '', daily: [], weekly: [], monthly: [], arrivals: [], departures: [] };
   } catch (error) {
     console.error('Error loading Mews data:', error);
-    return { lastUpdate: '', daily: [], weekly: [], monthly: [] };
+    return { lastUpdate: '', daily: [], weekly: [], monthly: [], arrivals: [], departures: [] };
   }
 }
 
