@@ -79,14 +79,14 @@ const PlaceCard = ({ name, category, lat, lng }: { name: string; category: strin
   );
 };
 
-// Category Filter
+// Category Filter - Simplified
 const CategoryFilter = ({ active, onSelect, language }: { active: CategoryType; onSelect: (cat: CategoryType) => void; language: string }) => {
-  const categories: { id: CategoryType; label: { en: string; nl: string }; icon: string }[] = [
-    { id: 'all', label: { en: 'All', nl: 'Alles' }, icon: 'apps' },
-    { id: 'breakfast', label: { en: 'Eat', nl: 'Eten' }, icon: 'cafe' },
-    { id: 'restaurants', label: { en: 'Dine', nl: 'Diner' }, icon: 'restaurant' },
-    { id: 'supermarkets', label: { en: 'Shop', nl: 'Winkel' }, icon: 'cart' },
-    { id: 'culture', label: { en: 'Culture', nl: 'Cultuur' }, icon: 'library' },
+  const categories: { id: CategoryType; label: { en: string; nl: string } }[] = [
+    { id: 'all', label: { en: 'All', nl: 'Alles' } },
+    { id: 'breakfast', label: { en: 'Eat', nl: 'Eten' } },
+    { id: 'restaurants', label: { en: 'Dine', nl: 'Diner' } },
+    { id: 'supermarkets', label: { en: 'Shop', nl: 'Winkel' } },
+    { id: 'culture', label: { en: 'Culture', nl: 'Cultuur' } },
   ];
 
   return (
@@ -97,7 +97,6 @@ const CategoryFilter = ({ active, onSelect, language }: { active: CategoryType; 
           style={[styles.filterBtn, active === cat.id && styles.filterBtnActive]}
           onPress={() => onSelect(cat.id)}
         >
-          <Ionicons name={cat.icon as any} size={14} color={active === cat.id ? '#FFFFFF' : '#9CA3AF'} />
           <Text style={[styles.filterText, active === cat.id && styles.filterTextActive]}>
             {cat.label[language as 'en' | 'nl'] || cat.label.en}
           </Text>
