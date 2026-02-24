@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import { loadReservations, loadSettings, getLastUpdate, DEFAULT_SETTINGS, saveSettings, saveReservations, loadMewsData, MewsDailyData, MewsReportStore, HotelSettings } from '../../utils/storage';
-import { calculateDashboard, DashboardData, generateDemoReservations, calculateDailyStats, DailyStats } from '../../utils/calculations';
+import { calculateDashboard, DashboardData, generateDemoReservations, calculateDailyStats, DailyStats, EnhancedAlert, RadarDay } from '../../utils/calculations';
 import { useLanguage } from '../../utils/LanguageContext';
 import { getDayNames, getMonthNames, getFullMonthNames } from '../../utils/i18n';
 
