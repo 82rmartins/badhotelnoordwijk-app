@@ -50,14 +50,16 @@ export default function AdminScreen() {
 
   const loadCurrentData = async () => {
     try {
-      const [loadedSettings, update, reservations] = await Promise.all([
+      const [loadedSettings, update, mewsData] = await Promise.all([
         loadSettings(),
         getLastUpdate(),
-        loadReservations(),
+        loadMewsData(),
       ]);
       setSettings(loadedSettings);
       setLastUpdate(update);
-      setReservationCount(reservations.length);
+      // Count total periods from Mews data
+      const totalPeriods = mewsData.daily.length + mewsData.weekly.length + mewsData.monthly.length;
+      setReservationCount(totalPeriods);
     } catch (error) {
       console.error('Error loading data:', error);
     }
