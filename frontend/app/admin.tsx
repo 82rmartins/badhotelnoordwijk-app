@@ -282,55 +282,6 @@ export default function AdminScreen() {
         totalSuccess > 0 ? (language === 'en' ? 'Import Complete' : language === 'nl' ? 'Import Voltooid' : 'Import Abgeschlossen') : (language === 'en' ? 'Import Failed' : language === 'nl' ? 'Import Mislukt' : 'Import Fehlgeschlagen'),
         summary
       );
-
-        if (reservations.length === 0 && data.length === 0) {
-          throw new Error(language === 'en' ? 'No valid data found in Excel file.' : language === 'nl' ? 'Geen geldige data gevonden in Excel bestand.' : 'Keine gültigen Daten in Excel-Datei gefunden.');
-        }
-
-        await saveReservations(reservations);
-        await loadCurrentData();
-
-        const typeLabel = reportType === 'daily' ? (language === 'en' ? 'Daily' : language === 'nl' ? 'Dagelijks' : 'Täglich') :
-                          reportType === 'weekly' ? (language === 'en' ? 'Weekly' : language === 'nl' ? 'Wekelijks' : 'Wöchentlich') :
-                          reportType === 'monthly' ? (language === 'en' ? 'Monthly' : language === 'nl' ? 'Maandelijks' : 'Monatlich') : '';
-        
-        const message = `✓ ${typeLabel} ${language === 'en' ? 'report imported' : language === 'nl' ? 'rapport geïmporteerd' : 'Bericht importiert'}: ${data.length} ${language === 'en' ? 'days of data' : language === 'nl' ? 'dagen aan data' : 'Tage an Daten'}`;
-        setLastResult(message);
-        
-        Alert.alert(
-          language === 'en' ? 'Success' : language === 'nl' ? 'Succes' : 'Erfolg',
-          message
-        );
-      } else {
-        // Handle CSV file
-        let content: string;
-        try {
-          content = await FileSystem.readAsStringAsync(file.uri);
-        } catch (readError) {
-          throw new Error(language === 'en' ? 'Could not read file. Make sure it is a valid CSV.' : 'Kon bestand niet lezen. Zorg ervoor dat het een geldig CSV is.');
-        }
-
-        const { reservations, errors } = parseCSV(content);
-
-        if (reservations.length === 0) {
-          throw new Error(language === 'en' ? 'No valid reservations found in file.' : 'Geen geldige reserveringen gevonden in bestand.');
-        }
-
-        await saveReservations(reservations);
-        await loadCurrentData();
-
-        const message = `✓ ${language === 'en' ? 'Processed' : 'Verwerkt'}: ${reservations.length} ${language === 'en' ? 'reservations imported' : 'reserveringen geïmporteerd'}`;
-        setLastResult(message);
-        
-        if (errors.length > 0) {
-          Alert.alert(
-            language === 'en' ? 'Import Complete' : 'Import Voltooid',
-            `${reservations.length} ${language === 'en' ? 'reservations imported' : 'reserveringen geïmporteerd'}.\n\n${language === 'en' ? 'Warnings' : 'Waarschuwingen'}:\n${errors.slice(0, 3).join('\n')}${errors.length > 3 ? `\n...${language === 'en' ? 'and' : 'en nog'} ${errors.length - 3} ${language === 'en' ? 'more' : 'meer'}` : ''}`
-          );
-        } else {
-          Alert.alert(t.success, message);
-        }
-      }
     } catch (error: any) {
       console.error('Upload error:', error);
       setLastResult(`✗ ${t.error}: ${error.message}`);
@@ -338,7 +289,7 @@ export default function AdminScreen() {
     } finally {
       setUploading(false);
     }
-  }, [language, t, settings.total_rooms, handleWebFileUpload]);
+  }, [language, t, settings.total_rooms, handleWebMultiFileUpload]);
 
   const seedDemoData = useCallback(async () => {
     try {
