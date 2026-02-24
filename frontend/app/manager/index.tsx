@@ -31,14 +31,30 @@ function buildDashboardFromMews(mewsData: MewsReportStore, settings: HotelSettin
   today.setHours(0, 0, 0, 0);
   const todayStr = today.toISOString().split('T')[0];
   
+  // ALWAYS use 24 rooms
+  const TOTAL_ROOMS = 24;
+  
   // Combine ALL data sources for lookup
   const allData = [...mewsData.daily, ...mewsData.weekly, ...mewsData.monthly];
   console.log('All data combined:', allData.length, 'records');
   
-  // Find the most recent data to display as "today"
-  // Sort by date descending and get the latest
-  const sortedData = [...allData].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  const latestData = sortedData.length > 0 ? sortedData[0] : null;
+  // Get arrivals and departures data
+  const arrivalsMap = new Map<string, number>();
+  const departuresMap = new Map<string, number>();
+  
+  if (mewsData.arrivals) {
+    for (const a of mewsData.arrivals) {
+      arrivalsMap.set(a.date, a.count);
+    }
+  }
+  if (mewsData.departures) {
+    for (const d of mewsData.departures) {
+      departuresMap.set(d.date, d.count);
+    }
+  }
+  
+  // Find today's data specifically
+  const todayDataFromFile = mewsData.daily.find(d => d.date === todayStr);
   
   // Calculate averages from all available data
   let totalOcc = 0, totalRev = 0, totalAdr = 0, dataCount = 0;
@@ -57,19 +73,36 @@ function buildDashboardFromMews(mewsData: MewsReportStore, settings: HotelSettin
   
   console.log('Calculated averages:', { avgOcc, avgRev, avgAdr, dataCount });
   
-  // Use latest data or averages for today display
+  // Get arrivals/departures for today
+  const todayArrivals = arrivalsMap.get(todayStr) || 0;
+  const todayDepartures = departuresMap.get(todayStr) || 0;
+  
+  // Use today's data from file, or calculate from averages
+  let todayOccupancy = avgOcc;
+  let todayOccupiedRooms = Math.round((avgOcc / 100) * TOTAL_ROOMS);
+  let todayRevenue = avgRev;
+  let todayAdr = avgAdr;
+  
+  if (todayDataFromFile) {
+    // Recalculate occupancy based on 24 rooms
+    todayOccupiedRooms = todayDataFromFile.occupiedRooms;
+    todayOccupancy = (todayOccupiedRooms / TOTAL_ROOMS) * 100;
+    todayRevenue = todayDataFromFile.revenue;
+    todayAdr = todayDataFromFile.adr;
+  }
+  
   const todayData: DailyStats = {
     date: today,
-    occupancy_percent: latestData?.occupancy || avgOcc,
-    rooms_occupied: latestData?.occupiedRooms || Math.round((avgOcc / 100) * settings.total_rooms),
-    total_rooms: latestData?.availableRooms || settings.total_rooms,
-    arrivals: latestData?.arrivals || 0,
-    departures: latestData?.departures || 0,
-    room_revenue: latestData?.revenue || avgRev,
+    occupancy_percent: Math.round(todayOccupancy * 10) / 10,
+    rooms_occupied: todayOccupiedRooms,
+    total_rooms: TOTAL_ROOMS,
+    arrivals: todayArrivals,
+    departures: todayDepartures,
+    room_revenue: todayRevenue,
     parking_revenue: 0,
     vending_revenue: 0,
     city_tax: 0,
-    adr: latestData?.adr || avgAdr,
+    adr: todayAdr,
   };
   
   // Build radar from available data
