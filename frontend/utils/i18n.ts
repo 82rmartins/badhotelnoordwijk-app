@@ -434,6 +434,149 @@ export const translations: Record<Language, Translations> = {
     d7BelowTarget: 'Reden: D+7 ({0}%) onder doel',
     d14BelowTarget: 'Reden: D+14 ({0}%) onder doel',
   },
+  de: {
+    // Header
+    lastUpdate: 'Letzte Aktualisierung',
+    never: 'Nie',
+    
+    // Status
+    underControl: 'Unter Kontrolle',
+    attention: 'Achtung',
+    risk: 'Risiko',
+    reason: 'Grund',
+    
+    // Trend
+    improving: 'Verbessernd',
+    stable: 'Stabil',
+    worsening: 'Verschlechternd',
+    
+    // Rhythm
+    accelerating: 'Beschleunigend',
+    decelerating: 'Verlangsamend',
+    
+    // Today section
+    today: 'HEUTE',
+    operation: 'Betrieb',
+    occupancy: 'Belegung',
+    rooms: 'Zimmer',
+    arrivals: 'Ankünfte',
+    departures: 'Abreisen',
+    dailyRevenue: 'Tagesumsatz',
+    parking: 'Parken',
+    vending: 'Automaten',
+    cityTax: 'Kurtaxe',
+    separate: 'separat',
+    
+    // Radar section
+    radar: 'RADAR',
+    next14Days: 'Nächste 14 Tage',
+    whatNeedsAttention: 'Was Aufmerksamkeit braucht',
+    todayLabel: 'heute',
+    nextDays: 'nächste Tage',
+    noCriticalIssues: 'Keine kritischen Probleme identifiziert.',
+    
+    // Control section
+    control: 'KONTROLLE',
+    weekAndMonth: 'Woche & Monat',
+    currentWeek: 'Aktuelle Woche',
+    vsLast: 'vs letzte',
+    avgOccupancy: 'Durchschn. Belegung',
+    totalRevenue: 'Gesamtumsatz',
+    avgAdr: 'Durchschn. ADR',
+    accumulatedOccupancy: 'Kumulierte Belegung',
+    accumulatedRevenue: 'Kumulierter Umsatz',
+    day: 'Tag',
+    of: 'von',
+    projectionMessage: 'Bei aktuellem Tempo, erwartete Durchschn. Belegung ist',
+    weeklyOccupancy: 'Wöchentliche Belegung',
+    
+    // Days
+    sun: 'So',
+    mon: 'Mo',
+    tue: 'Di',
+    wed: 'Mi',
+    thu: 'Do',
+    fri: 'Fr',
+    sat: 'Sa',
+    
+    // Months
+    jan: 'Jan',
+    feb: 'Feb',
+    mar: 'Mär',
+    apr: 'Apr',
+    may: 'Mai',
+    jun: 'Jun',
+    jul: 'Jul',
+    aug: 'Aug',
+    sep: 'Sep',
+    oct: 'Okt',
+    nov: 'Nov',
+    dec: 'Dez',
+    
+    // Month full names
+    january: 'Januar',
+    february: 'Februar',
+    march: 'März',
+    april: 'April',
+    mayFull: 'Mai',
+    june: 'Juni',
+    july: 'Juli',
+    august: 'August',
+    september: 'September',
+    october: 'Oktober',
+    november: 'November',
+    december: 'Dezember',
+    
+    // Admin
+    administration: 'Verwaltung',
+    localData: 'Lokale Daten',
+    reservations: 'Reservierungen',
+    update: 'Aktualisieren',
+    uploadInfo: 'Laden Sie eine CSV-Datei aus Mews PMS hoch, um die Daten zu aktualisieren. Alle Berechnungen erfolgen lokal auf dem Gerät.',
+    importFromMews: 'Daten aus Mews importieren',
+    csvUpload: 'CSV-Datei mit Reservierungen hochladen',
+    selectCsvFile: 'CSV-Datei auswählen',
+    processing: 'Verarbeitung...',
+    expectedFormat: 'Erwartetes CSV-Format:',
+    requiredColumns: 'Erforderliche Spalten:',
+    optionalColumns: 'Optionale Spalten:',
+    dateFormats: 'Datumsformate:',
+    demoData: 'Demo-Daten',
+    generateTestData: 'Testdaten generieren',
+    createDemoData: 'Demo-Daten erstellen',
+    generating: 'Generierung...',
+    warning: 'Warnung',
+    replaceWarning: 'Diese Aktion ersetzt alle vorhandenen Daten.',
+    hotelSettings: 'Hotel-Einstellungen',
+    currentParams: 'Aktuelle Parameter',
+    totalRooms: 'Gesamtzimmer',
+    highSeasonTarget: 'Hochsaison-Ziel (Apr-Sep)',
+    lowSeasonTarget: 'Nebensaison-Ziel (Okt-Mär)',
+    clearAllData: 'Alle Daten löschen',
+    clearConfirmTitle: 'Daten löschen',
+    clearConfirmMessage: 'Möchten Sie wirklich alle Daten löschen? Diese Aktion kann nicht rückgängig gemacht werden.',
+    cancel: 'Abbrechen',
+    delete: 'Löschen',
+    success: 'Erfolg',
+    error: 'Fehler',
+    dataCleared: 'Alle Daten wurden gelöscht.',
+    v1Architecture: 'V1 — 100% lokale Verarbeitung. Daten auf dem Gerät gespeichert. Funktioniert offline.',
+    
+    // Alerts
+    occupancyBelowTarget: 'Belegung heute ({0}%) unter Ziel ({1}%)',
+    criticalDaysAhead: '{0} kritische Tage in den nächsten 7 Tagen',
+    consecutiveLowDays: '{0} aufeinanderfolgende Tage mit niedriger Belegung',
+    nextDaysOnTrack: 'Nächste Tage auf Kurs.',
+    nextDaysBelowTarget: 'Nächste Tage auch unter Ziel.',
+    todayOnTarget: 'Heute auf Ziel.',
+    requiresAttention: 'Erfordert sofortige Aufmerksamkeit.',
+    noCriticalIssues: 'Keine kritischen Probleme identifiziert.',
+    
+    // Status reasons
+    todayOccupancyBelow: 'Grund: Belegung heute ({0}%) unter Ziel',
+    d7BelowTarget: 'Grund: D+7 ({0}%) unter Ziel',
+    d14BelowTarget: 'Grund: D+14 ({0}%) unter Ziel',
+  },
 };
 
 // Helper function to format strings with placeholders
