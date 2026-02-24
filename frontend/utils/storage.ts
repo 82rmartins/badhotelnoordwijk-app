@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   SETTINGS: '@badhotel_settings',
   LAST_UPDATE: '@badhotel_last_update',
   DASHBOARD_CACHE: '@badhotel_dashboard_cache',
+  MEWS_DATA: '@badhotel_mews_data', // NEW: Store Mews report data directly
 };
 
 export interface Reservation {
@@ -13,11 +14,35 @@ export interface Reservation {
   room_number: string;
   check_in: string; // ISO date string
   check_out: string; // ISO date string
-  room_revenue: number;
-  parking_revenue: number;
-  vending_revenue: number;
-  city_tax: number;
+  room_revenue?: number;
+  parking_revenue?: number;
+  vending_revenue?: number;
+  city_tax?: number;
   status: string;
+  adults?: number;
+  children?: number;
+  total_amount?: number;
+  payment_status?: string;
+}
+
+// NEW: Direct Mews data structure
+export interface MewsDailyData {
+  date: string; // ISO date
+  occupancy: number; // percentage
+  occupiedRooms: number;
+  availableRooms: number;
+  revenue: number;
+  adr: number;
+  arrivals: number;
+  departures: number;
+  customers: number;
+}
+
+export interface MewsReportStore {
+  lastUpdate: string;
+  daily: MewsDailyData[];
+  weekly: MewsDailyData[];
+  monthly: MewsDailyData[];
 }
 
 export interface HotelSettings {
