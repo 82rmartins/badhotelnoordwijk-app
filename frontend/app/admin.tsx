@@ -63,28 +63,59 @@ export default function AdminScreen() {
     }
   };
 
-  // Process a single XLSX file
-  const processXLSXFile = async (content: ArrayBuffer | string, fileName: string): Promise<string> => {
-    try {
-      const { reservations, data, reportType, errors } = parseXLSX(content, settings.total_rooms);
+  // Process XLSX files and save to Mews data store (REPLACES, doesn't append)
+  const processAndSaveXLSXFiles = async (filesData: { content: ArrayBuffer | string, fileName: string }[]): Promise<string[]> => {
+    const results: string[] = [];
+    
+    // First, clear existing data to avoid duplicates
+    await clearAllData();
+    
+    // Collect all data by type
+    const dailyData: MewsDailyData[] = [];
+    const weeklyData: MewsDailyData[] = [];
+    const monthlyData: MewsDailyData[] = [];
 
-      if (data.length === 0) {
-        return `✗ ${fileName}: No valid data found`;
+    for (const { content, fileName } of filesData) {
+      try {
+        const { data, reportType, errors } = parseXLSX(content, settings.total_rooms);
+
+        if (data.length === 0) {
+          results.push(`✗ ${fileName}: ${errors.length > 0 ? errors[0] : 'No data found'}`);
+          continue;
+        }
+
+        // Sort data by type
+        if (reportType === 'daily') {
+          dailyData.push(...data);
+        } else if (reportType === 'weekly') {
+          weeklyData.push(...data);
+        } else if (reportType === 'monthly') {
+          monthlyData.push(...data);
+        } else {
+          // Unknown type - try to guess based on period format
+          monthlyData.push(...data);
+        }
+
+        const typeLabel = reportType === 'daily' ? 'Daily' : 
+                          reportType === 'weekly' ? 'Weekly' : 
+                          reportType === 'monthly' ? 'Monthly' : 'Report';
+        
+        results.push(`✓ ${fileName} (${typeLabel}): ${data.length} periods`);
+      } catch (error: any) {
+        results.push(`✗ ${fileName}: ${error.message}`);
       }
-
-      // Append to existing reservations instead of replacing
-      const existingReservations = await loadReservations();
-      const allReservations = [...existingReservations, ...reservations];
-      await saveReservations(allReservations);
-
-      const typeLabel = reportType === 'daily' ? 'Daily' : 
-                        reportType === 'weekly' ? 'Weekly' : 
-                        reportType === 'monthly' ? 'Monthly' : 'Report';
-      
-      return `✓ ${fileName} (${typeLabel}): ${data.length} records imported`;
-    } catch (error: any) {
-      return `✗ ${fileName}: ${error.message}`;
     }
+
+    // Save all collected data (REPLACES existing)
+    await saveMewsData({
+      daily: dailyData,
+      weekly: weeklyData,
+      monthly: monthlyData,
+    });
+
+    console.log('Saved Mews data:', { daily: dailyData.length, weekly: weeklyData.length, monthly: monthlyData.length });
+
+    return results;
   };
 
   // Web-specific: Handle multiple files
@@ -95,60 +126,57 @@ export default function AdminScreen() {
     setUploading(true);
     setLastResult(null);
 
-    const results: string[] = [];
-    let totalSuccess = 0;
+    try {
+      // Read all files first
+      const filesData: { content: ArrayBuffer | string, fileName: string }[] = [];
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const fileName = file.name;
-      const isXLSX = fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls');
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileName = file.name;
+        const isXLSX = fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls');
 
-      try {
-        const content = await new Promise<ArrayBuffer | string>((resolve, reject) => {
+        if (!isXLSX) {
+          continue; // Skip non-XLSX files
+        }
+
+        const content = await new Promise<ArrayBuffer>((resolve, reject) => {
           const reader = new FileReader();
-          reader.onload = (e) => resolve(e.target?.result as ArrayBuffer | string);
+          reader.onload = (e) => resolve(e.target?.result as ArrayBuffer);
           reader.onerror = () => reject(new Error('Could not read file'));
-          
-          if (isXLSX) {
-            reader.readAsArrayBuffer(file);
-          } else {
-            reader.readAsText(file);
-          }
+          reader.readAsArrayBuffer(file);
         });
 
-        if (isXLSX) {
-          const result = await processXLSXFile(content as ArrayBuffer, fileName);
-          results.push(result);
-          if (result.startsWith('✓')) totalSuccess++;
-        } else {
-          // CSV file
-          const { reservations, errors } = parseCSV(content as string);
-          if (reservations.length > 0) {
-            const existingReservations = await loadReservations();
-            await saveReservations([...existingReservations, ...reservations]);
-            results.push(`✓ ${fileName}: ${reservations.length} reservations imported`);
-            totalSuccess++;
-          } else {
-            results.push(`✗ ${fileName}: No valid data found`);
-          }
-        }
-      } catch (error: any) {
-        results.push(`✗ ${fileName}: ${error.message}`);
+        filesData.push({ content, fileName });
       }
-    }
 
-    await loadCurrentData();
-    
-    const summary = `${totalSuccess}/${files.length} files imported successfully\n\n${results.join('\n')}`;
-    setLastResult(summary);
-    
-    Alert.alert(
-      totalSuccess === files.length ? (language === 'en' ? 'Success' : language === 'nl' ? 'Succes' : 'Erfolg') : 
-                                       (language === 'en' ? 'Import Complete' : language === 'nl' ? 'Import Voltooid' : 'Import Abgeschlossen'),
-      summary
-    );
-    
-    setUploading(false);
+      if (filesData.length === 0) {
+        Alert.alert(
+          language === 'en' ? 'Error' : 'Fehler',
+          language === 'en' ? 'No valid XLSX files selected' : 'Keine gültigen XLSX-Dateien ausgewählt'
+        );
+        setUploading(false);
+        return;
+      }
+
+      // Process all files and save (REPLACES existing data)
+      const results = await processAndSaveXLSXFiles(filesData);
+      
+      await loadCurrentData();
+      
+      const successCount = results.filter(r => r.startsWith('✓')).length;
+      const summary = `${successCount}/${filesData.length} ${language === 'en' ? 'files imported' : 'Dateien importiert'}\n\n${results.join('\n')}\n\n${language === 'en' ? 'Previous data was replaced.' : 'Vorherige Daten wurden ersetzt.'}`;
+      setLastResult(summary);
+      
+      Alert.alert(
+        successCount > 0 ? (language === 'en' ? 'Import Complete' : 'Import Abgeschlossen') : (language === 'en' ? 'Import Failed' : 'Import Fehlgeschlagen'),
+        summary
+      );
+    } catch (error: any) {
+      setLastResult(`✗ Error: ${error.message}`);
+      Alert.alert(language === 'en' ? 'Error' : 'Fehler', error.message);
+    } finally {
+      setUploading(false);
+    }
   }, [language, settings.total_rooms]);
 
   // Mobile-specific: Pick multiple files
@@ -157,7 +185,7 @@ export default function AdminScreen() {
     if (Platform.OS === 'web') {
       const input = document.createElement('input');
       input.type = 'file';
-      input.accept = '.csv,.xlsx,.xls';
+      input.accept = '.xlsx,.xls';
       input.multiple = true; // Allow multiple files
       input.onchange = handleWebMultiFileUpload;
       input.click();
