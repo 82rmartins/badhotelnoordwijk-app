@@ -1,7 +1,7 @@
 // Language translations for Bad Hotel Noordwijk app
-// Supports: EN (English) and NL (Dutch)
+// Supports: EN (English), NL (Dutch), and DE (German)
 
-export type Language = 'en' | 'nl';
+export type Language = 'en' | 'nl' | 'de';
 
 export interface Translations {
   // Header
