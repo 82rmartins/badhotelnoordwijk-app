@@ -441,7 +441,7 @@ const MonthlyChart = ({ monthData }: { monthData: any }) => {
 };
 
 // Week Stats Card (Swipeable) - 5 weeks: 2 back, current, 2 forward
-const WeekStatsCard = ({ weekOffset, reservations, settings }: { weekOffset: number; reservations: any[]; settings: any }) => {
+const WeekStatsCard = ({ weekOffset, mewsData, settings }: { weekOffset: number; mewsData: MewsReportStore; settings: any }) => {
   const { t, language } = useLanguage();
   const today = new Date();
   const weekStart = new Date(today);
@@ -449,19 +449,24 @@ const WeekStatsCard = ({ weekOffset, reservations, settings }: { weekOffset: num
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
 
-  // Calculate week stats
-  let totalOcc = 0, totalRev = 0, totalAdr = 0, daysWithAdr = 0;
+  // Calculate week stats from Mews data
+  let totalOcc = 0, totalRev = 0, totalAdr = 0, daysWithData = 0;
   for (let i = 0; i < 7; i++) {
     const d = new Date(weekStart);
     d.setDate(weekStart.getDate() + i);
-    const stats = calculateDailyStats(d, reservations, settings);
-    totalOcc += stats.occupancy_percent;
-    totalRev += stats.room_revenue + stats.parking_revenue + stats.vending_revenue;
-    if (stats.adr > 0) { totalAdr += stats.adr; daysWithAdr++; }
+    const dateStr = d.toISOString().split('T')[0];
+    const dayData = mewsData.daily.find(m => m.date === dateStr);
+    
+    if (dayData) {
+      totalOcc += dayData.occupancy;
+      totalRev += dayData.revenue;
+      totalAdr += dayData.adr;
+      daysWithData++;
+    }
   }
 
-  const avgOcc = totalOcc / 7;
-  const avgAdr = daysWithAdr > 0 ? totalAdr / daysWithAdr : 0;
+  const avgOcc = daysWithData > 0 ? totalOcc / daysWithData : 0;
+  const avgAdr = daysWithData > 0 ? totalAdr / daysWithData : 0;
   const fmt = (v: number) => `€${v.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`;
 
   const getWeekLabel = () => {
@@ -507,7 +512,7 @@ const WeekStatsCard = ({ weekOffset, reservations, settings }: { weekOffset: num
 };
 
 // Month Stats Card (Swipeable) - 6 months: 2 back, current, 3 forward
-const MonthStatsCard = ({ monthOffset, reservations, settings }: { monthOffset: number; reservations: any[]; settings: any }) => {
+const MonthStatsCard = ({ monthOffset, mewsData, settings }: { monthOffset: number; mewsData: MewsReportStore; settings: any }) => {
   const { t, language } = useLanguage();
   const fullMonths = getFullMonthNames(language);
   
