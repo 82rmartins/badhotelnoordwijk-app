@@ -23,8 +23,11 @@ import {
   loadSettings, 
   getLastUpdate,
   clearAllData,
+  saveMewsData,
+  loadMewsData,
   HotelSettings,
-  DEFAULT_SETTINGS 
+  DEFAULT_SETTINGS,
+  MewsDailyData 
 } from '../utils/storage';
 import { parseCSV } from '../utils/csvParser';
 import { parseXLSX } from '../utils/xlsxParser';
