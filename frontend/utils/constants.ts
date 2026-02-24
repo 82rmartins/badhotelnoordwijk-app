@@ -22,46 +22,52 @@ export const HOTEL_CONFIG = {
   terrace_close: '22:00',
 };
 
-// Nearby Places - From Flyers
+// Nearby Places - From Flyers (with full addresses for Google Maps)
 export const NEARBY_PLACES = {
   breakfast: [
-    { name: 'De Smaakmaker', category: 'breakfast', lat: 52.2446, lng: 4.4362 },
-    { name: 'Presso Noordwijk', category: 'breakfast', lat: 52.2440, lng: 4.4350 },
+    { name: 'De Smaakmaker Restaurant', category: 'breakfast', address: 'Hoofdstraat 63, 2202 EV Noordwijk' },
+    { name: 'Presso Noordwijk', category: 'breakfast', address: 'Hoofdstraat 42, 2202 GC Noordwijk' },
   ],
   bakeries: [
-    { name: 'Oerbakker De Witt', category: 'bakery', lat: 52.2448, lng: 4.4365 },
+    { name: 'Oerbakker de Witt', category: 'bakery', address: 'Schoolstraat 15-A, 2202 HC Noordwijk' },
   ],
   supermarkets: [
-    { name: 'Vomar Voordeelmarkt', category: 'supermarket', lat: 52.2445, lng: 4.4370 },
-    { name: 'Lidl', category: 'supermarket', lat: 52.2442, lng: 4.4355 },
+    { name: 'Vomar Voordeelmarkt', category: 'supermarket', address: 'Bomstraat 19, 2202 GH Noordwijk' },
+    { name: 'Lidl', category: 'supermarket', address: 'Rederijkersplein 7, 2203 GB Noordwijk' },
   ],
   restaurants: [
-    { name: 'Fish & Chips Noordwijk', category: 'restaurant', lat: 52.2450, lng: 4.4400 },
-    { name: 'Breakers Beach House', category: 'beach_club', lat: 52.2460, lng: 4.4420 },
-    { name: 'De Zeemeeuw Strandpaviljoen', category: 'beach_club', lat: 52.2455, lng: 4.4415 },
-    { name: 'Beachclub O', category: 'beach_club', lat: 52.2458, lng: 4.4418 },
-    { name: 'Nomade Beach House', category: 'beach_club', lat: 52.2462, lng: 4.4422 },
+    { name: 'Fish & Chips Noordwijk', category: 'restaurant', address: 'Palaceplein 4, 2202 ER Noordwijk' },
+    { name: 'Breakers Beach House', category: 'beach_club', address: 'Koningin Astrid Boulevard 5, 2202 BK Noordwijk' },
+    { name: 'De Zeemeeuw', category: 'beach_club', address: 'Kon. Wilhelmina Boulevard 108, 2202 GW Noordwijk' },
+    { name: 'Beachclub O', category: 'beach_club', address: 'Kon. Wilhelmina Boulevard 106, 2202 GW Noordwijk' },
+    { name: 'Nomade Beach House', category: 'beach_club', address: 'Kon. Wilhelmina Boulevard 104, 2202 GW Noordwijk' },
   ],
   culture: [
-    { name: 'Bibliotheek Bollenstreek', category: 'culture', lat: 52.2440, lng: 4.4340 },
-    { name: 'Museum Noordwijk', category: 'culture', lat: 52.2435, lng: 4.4335 },
-    { name: 'Museum Engelandvaarders', category: 'culture', lat: 52.2438, lng: 4.4338 },
-    { name: 'Atlantikwall Museum Noordwijk', category: 'culture', lat: 52.2465, lng: 4.4400 },
-    { name: 'Museum of Comic Art', category: 'culture', lat: 52.2433, lng: 4.4330 },
-    { name: 'Space Expo', category: 'culture', lat: 52.2190, lng: 4.4200 },
+    { name: 'Library Noordwijk', category: 'culture', address: 'Akkerwinde 1a, 2201 MD Noordwijk' },
+    { name: 'Museum Noordwijk', category: 'culture', address: 'Jan Kroonsplein 4, 2202 JC Noordwijk' },
+    { name: 'Museum Engelandvaarders', category: 'culture', address: 'Bosweg 15, 2202 NX Noordwijk' },
+    { name: 'Atlantikwall Museum Noordwijk', category: 'culture', address: 'Verlengde Bosweg 1, 2202 NT Noordwijk' },
+    { name: 'Museum of Comic Art', category: 'culture', address: 'Bomstraat 11, 2202 GH Noordwijk' },
+    { name: 'Space Expo', category: 'culture', address: 'Keplerlaan 3, 2201 AZ Noordwijk' },
   ],
   wellness: [
-    { name: 'Holland & Barrett', category: 'wellness', lat: 52.2444, lng: 4.4358 },
-    { name: 'Kruidvat', category: 'pharmacy', lat: 52.2443, lng: 4.4356 },
-    { name: 'Xenos Noordwijk', category: 'shop', lat: 52.2441, lng: 4.4354 },
+    { name: 'Holland & Barrett', category: 'wellness', address: 'Hoofdstraat 51, 2202 ET Noordwijk' },
+    { name: 'Kruidvat', category: 'pharmacy', address: 'Hoofdstraat 60, 2202 GB Noordwijk' },
+    { name: 'Xenos Noordwijk', category: 'shop', address: 'Hoofdstraat 94, 2202 GA Noordwijk' },
   ],
 };
 
 // Authorized emails for Manager Mode
 export const AUTHORIZED_EMAILS = [
-  'admin@badhotelnoordwijk.com',
-  'manager@badhotelnoordwijk.com',
-  // Add more emails here
+  'carmen@eccleiden.com',
+  'lgerrits@kafrahousing.com',
+  'viviane@eccleiden.com',
+  'msmets@kafrahousing.com',
+  'sbeska@kafrahousing.com',
+  'fvangool@kafrahousing.com',
+  'mbeska@kafrahousing.com',
+  'rmartins@kafrahousing.com',
+  'ssebralla@kafrahousing.com',
 ];
 
 // Weather API (OpenWeatherMap free tier)
