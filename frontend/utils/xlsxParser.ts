@@ -215,27 +215,43 @@ export function parseXLSX(content: string | ArrayBuffer, totalRooms: number = 24
         occupancy = occupancy * 100;
       }
 
+      // For WEEKLY reports, the "occupied" and "available" are totals for 7 days
+      // So we need to calculate daily average
+      let dailyOccupied = occupied;
+      if (reportType === 'weekly' && occupied > totalRooms) {
+        dailyOccupied = occupied / 7; // Average per day
+      }
+
       // Skip if no meaningful data
-      if (occupied === 0 && revenue === 0 && occupancy === 0) continue;
+      if (dailyOccupied === 0 && revenue === 0 && occupancy === 0) continue;
 
       // Parse period to date
       const periodDate = parsePeriodToDate(periods[i], reportType);
 
-      // ALWAYS use totalRooms (24) instead of file value (might be 21 due to out-of-order)
+      // ALWAYS use totalRooms (24) instead of file value
       const roomsToUse = totalRooms;
       
-      // Recalculate occupancy based on 24 rooms if needed
+      // Calculate occupancy based on 24 rooms per day
+      // Use the occupancy from file if it's reasonable, otherwise recalculate
       let adjustedOccupancy = occupancy;
-      if (availableFromFile > 0 && availableFromFile !== totalRooms && occupied > 0) {
-        // Recalculate: if file says 21 available and 10 occupied = 47.6%
-        // But with 24 rooms: 10/24 = 41.7%
-        adjustedOccupancy = (occupied / totalRooms) * 100;
+      
+      // If occupancy is over 100%, it's wrong - recalculate from occupied rooms
+      if (occupancy > 100 || occupancy === 0) {
+        adjustedOccupancy = (dailyOccupied / roomsToUse) * 100;
       }
+      
+      // For weekly data with many rooms, recalculate to be safe
+      if (reportType === 'weekly' && dailyOccupied > 0) {
+        adjustedOccupancy = (dailyOccupied / roomsToUse) * 100;
+      }
+
+      // Cap at 100%
+      if (adjustedOccupancy > 100) adjustedOccupancy = 100;
 
       data.push({
         date: periodDate,
         occupancy: Math.round(adjustedOccupancy * 10) / 10,
-        occupiedRooms: Math.round(occupied),
+        occupiedRooms: Math.round(dailyOccupied),
         availableRooms: roomsToUse, // Always 24
         revenue: Math.round(revenue * 100) / 100,
         adr: Math.round(adr * 100) / 100,
