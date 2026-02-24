@@ -144,15 +144,12 @@ export async function clearAllData(): Promise<void> {
 // NEW: Save Mews report data directly (REPLACES existing data)
 export async function saveMewsData(data: Partial<MewsReportStore>): Promise<void> {
   try {
-    // Load existing data
-    const existing = await loadMewsData();
-    
-    // Merge with new data (replace, don't append)
+    // REPLACE all data - don't merge with existing
     const updated: MewsReportStore = {
       lastUpdate: new Date().toISOString(),
-      daily: data.daily || existing.daily,
-      weekly: data.weekly || existing.weekly,
-      monthly: data.monthly || existing.monthly,
+      daily: data.daily !== undefined ? data.daily : [],
+      weekly: data.weekly !== undefined ? data.weekly : [],
+      monthly: data.monthly !== undefined ? data.monthly : [],
     };
     
     await AsyncStorage.setItem(STORAGE_KEYS.MEWS_DATA, JSON.stringify(updated));
