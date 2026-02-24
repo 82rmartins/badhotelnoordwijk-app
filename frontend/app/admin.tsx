@@ -387,17 +387,28 @@ export default function AdminScreen() {
           </View>
           <View style={styles.statusDetails}>
             <View style={styles.statusItem}>
-              <Text style={styles.statusValue}>{reservationCount}</Text>
-              <Text style={styles.statusItemLabel}>{t.reservations}</Text>
+              <Text style={styles.statusValue}>{dataDetails.daily}</Text>
+              <Text style={styles.statusItemLabel}>Daily</Text>
             </View>
             <View style={styles.statusDivider} />
+            <View style={styles.statusItem}>
+              <Text style={styles.statusValue}>{dataDetails.weekly}</Text>
+              <Text style={styles.statusItemLabel}>Weekly</Text>
+            </View>
+            <View style={styles.statusDivider} />
+            <View style={styles.statusItem}>
+              <Text style={styles.statusValue}>{dataDetails.monthly}</Text>
+              <Text style={styles.statusItemLabel}>Monthly</Text>
+            </View>
+          </View>
+          <View style={[styles.statusDetails, { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#1F1F23' }]}>
             <View style={styles.statusItem}>
               <Text style={styles.statusValue}>{settings.total_rooms}</Text>
               <Text style={styles.statusItemLabel}>{t.rooms}</Text>
             </View>
             <View style={styles.statusDivider} />
             <View style={styles.statusItem}>
-              <Text style={styles.statusValue}>{formatDate(lastUpdate).split(' ')[0]}</Text>
+              <Text style={[styles.statusValue, { fontSize: 14 }]}>{formatDate(lastUpdate)}</Text>
               <Text style={styles.statusItemLabel}>{t.update}</Text>
             </View>
           </View>
