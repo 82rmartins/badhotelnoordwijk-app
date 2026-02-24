@@ -1,159 +1,177 @@
-diff --git a/frontend/app/guest/index.tsx b/frontend/app/guest/index.tsx
-index 01a8ad8..ae0afe6 100644
---- a/frontend/app/guest/index.tsx
-+++ b/frontend/app/guest/index.tsx
-@@ -286,6 +286,6 @@ const styles = StyleSheet.create({
-   quickAction: { flex: 1, backgroundColor: '#111113', borderRadius: 16, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: '#1F1F23', minHeight: 140 },
-   quickActionPlaceholder: { flex: 1 },
-   quickActionIcon: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
--  quickActionLabel: { fontSize: 14, fontWeight: '600', color: '#FFFFFF', textAlign: 'center' },
-+  quickActionLabel: { fontSize: 14, fontWeight: '600', color: '#FFFFFF', textAlign: 'center', textShadowColor: 'transparent', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 0 },
-   footerSpacer: { height: 40 },
- });
+diff --git a/frontend/utils/LanguageContext.tsx b/frontend/utils/LanguageContext.tsx
+index 6810d9d..d6e898e 100644
+--- a/frontend/utils/LanguageContext.tsx
++++ b/frontend/utils/LanguageContext.tsx
+@@ -18,7 +18,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
+   useEffect(() => {
+     // Load saved language preference
+     AsyncStorage.getItem(LANGUAGE_KEY).then((saved) => {
+-      if (saved === 'en' || saved === 'nl') {
++      if (saved === 'en' || saved === 'nl' || saved === 'de') {
+         setLanguageState(saved);
+       }
+     });
 diff --git a/model.patch b/model.patch
-index d4b77ec..e69de29 100644
+index 7180236..e69de29 100644
 --- a/model.patch
 +++ b/model.patch
-@@ -1,142 +0,0 @@
+@@ -1,159 +0,0 @@
+-diff --git a/frontend/app/guest/index.tsx b/frontend/app/guest/index.tsx
+-index 01a8ad8..ae0afe6 100644
+---- a/frontend/app/guest/index.tsx
+-+++ b/frontend/app/guest/index.tsx
+-@@ -286,6 +286,6 @@ const styles = StyleSheet.create({
+-   quickAction: { flex: 1, backgroundColor: '#111113', borderRadius: 16, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: '#1F1F23', minHeight: 140 },
+-   quickActionPlaceholder: { flex: 1 },
+-   quickActionIcon: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+--  quickActionLabel: { fontSize: 14, fontWeight: '600', color: '#FFFFFF', textAlign: 'center' },
+-+  quickActionLabel: { fontSize: 14, fontWeight: '600', color: '#FFFFFF', textAlign: 'center', textShadowColor: 'transparent', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 0 },
+-   footerSpacer: { height: 40 },
+- });
 -diff --git a/model.patch b/model.patch
--index 1093a62..e69de29 100644
+-index d4b77ec..e69de29 100644
 ---- a/model.patch
 -+++ b/model.patch
--@@ -1,137 +0,0 @@
---diff --git a/backend/server.py b/backend/server.py
---index c254907..8c6e336 100644
------ a/backend/server.py
---+++ b/backend/server.py
---@@ -192,6 +192,10 @@ async def get_settings():
---         default_settings = HotelSettings()
---         await db.settings.insert_one(default_settings.dict())
---         return default_settings.dict()
---+    
---+    # Remove MongoDB ObjectId to avoid serialization issues
---+    if "_id" in settings:
---+        del settings["_id"]
---     return settings
--- 
--- @api_router.put("/settings")
---@@ -207,15 +211,21 @@ async def update_settings(total_rooms: int = 24, high_season_target: float = 85.
---         await db.settings.insert_one(new_settings.dict())
---         return new_settings.dict()
---     
---+    # Update using MongoDB _id or custom id field
---+    query_field = "_id" if "_id" in settings else "id"
---     await db.settings.update_one(
----        {"id": settings["id"]},
---+        {query_field: settings[query_field]},
---         {"$set": {
---             "total_rooms": total_rooms,
---             "high_season_target": high_season_target,
---             "low_season_target": low_season_target
---         }}
---     )
----    return await db.settings.find_one()
---+    updated_settings = await db.settings.find_one()
---+    # Remove MongoDB ObjectId to avoid serialization issues
---+    if "_id" in updated_settings:
---+        del updated_settings["_id"]
---+    return updated_settings
--- 
--- @api_router.post("/upload/reservations")
--- async def upload_reservations(file: UploadFile = File(...)):
---diff --git a/test_result.md b/test_result.md
---index c1c6526..3e009b0 100644
------ a/test_result.md
---+++ b/test_result.md
---@@ -111,11 +111,14 @@ backend:
---     file: "/app/backend/server.py"
---     stuck_count: 0
---     priority: "high"
----    needs_retesting: true
---+    needs_retesting: false
---     status_history:
---         - working: true
---           agent: "main"
---           comment: "GET /api/dashboard returns complete dashboard data with status, rhythm, today stats, radar 14 days, week and month aggregations"
---+        - working: true
---+          agent: "testing"
---+          comment: "✅ TESTED: Dashboard API fully functional - returns complete data structure with status (yellow), rhythm, today stats (46.2% occupancy, €2275.51 revenue), 14-day radar forecast, week/month aggregations, and alerts array"
--- 
---   - task: "CSV upload for reservations"
---     implemented: true
---@@ -123,11 +126,14 @@ backend:
---     file: "/app/backend/server.py"
---     stuck_count: 0
---     priority: "high"
----    needs_retesting: true
---+    needs_retesting: false
---     status_history:
---         - working: true
---           agent: "main"
---           comment: "POST /api/upload/reservations accepts CSV files, parses multiple date formats, and recalculates daily stats"
---+        - working: true
---+          agent: "testing"
---+          comment: "✅ TESTED: CSV upload working correctly - processed 10 reservations (added), handles multiple date formats, recalculates daily stats automatically"
--- 
---   - task: "Seed demo data endpoint"
---     implemented: true
---@@ -135,23 +141,32 @@ backend:
---     file: "/app/backend/server.py"
---     stuck_count: 0
---     priority: "medium"
----    needs_retesting: true
---+    needs_retesting: false
---     status_history:
---         - working: true
---           agent: "main"
---           comment: "POST /api/seed-demo-data generates realistic hotel reservation data for testing"
---+        - working: true
---+          agent: "testing"
---+          comment: "✅ TESTED: Demo data seeding working perfectly - created 313 realistic reservations with varied occupancy patterns, revenue calculations, and proper date ranges"
--- 
---   - task: "Settings API"
---     implemented: true
---     working: true
---     file: "/app/backend/server.py"
----    stuck_count: 0
---+    stuck_count: 1
---     priority: "low"
----    needs_retesting: true
---+    needs_retesting: false
---     status_history:
---         - working: true
---           agent: "main"
---           comment: "GET/PUT /api/settings for hotel configuration (rooms, season targets)"
---+        - working: false
---+          agent: "testing"
---+          comment: "❌ CRITICAL BUG FOUND: Settings API failing with MongoDB ObjectId serialization error (HTTP 520). Root cause: FastAPI cannot serialize MongoDB ObjectId objects to JSON"
---+        - working: true
---+          agent: "testing"
---+          comment: "✅ FIXED & TESTED: Settings API now working - fixed ObjectId serialization by removing _id field before response. GET returns all required fields (total_rooms: 24, targets: 85%/65%), PUT updates work correctly"
--- 
--- frontend:
---   - task: "Executive Dashboard UI"
---@@ -181,18 +196,17 @@ frontend:
--- metadata:
---   created_by: "main_agent"
---   version: "1.0"
----  test_sequence: 1
---+  test_sequence: 2
---   run_ui: false
--- 
--- test_plan:
----  current_focus:
----    - "Dashboard API endpoint"
----    - "CSV upload for reservations"
----    - "Seed demo data endpoint"
---+  current_focus: []
---   stuck_tasks: []
---   test_all: false
---   test_priority: "high_first"
--- 
--- agent_communication:
---     - agent: "main"
----      message: "Initial MVP implementation complete. Backend APIs for dashboard, CSV upload, and demo data are working. Frontend executive dashboard and admin screen are functional. Please test the backend APIs."
---\ No newline at end of file
---+      message: "Initial MVP implementation complete. Backend APIs for dashboard, CSV upload, and demo data are working. Frontend executive dashboard and admin screen are functional. Please test the backend APIs."
---+    - agent: "testing"
---+      message: "✅ BACKEND TESTING COMPLETE: All 4 backend APIs tested and working. Found and FIXED critical MongoDB ObjectId serialization bug in Settings API. Dashboard API returns complete data structure, CSV upload processes files correctly, demo data seeding creates realistic reservations, settings API handles GET/PUT operations properly. All endpoints return correct HTTP status codes and data structures. Backend is production-ready."
---\ No newline at end of file
+-@@ -1,142 +0,0 @@
+--diff --git a/model.patch b/model.patch
+--index 1093a62..e69de29 100644
+----- a/model.patch
+--+++ b/model.patch
+--@@ -1,137 +0,0 @@
+---diff --git a/backend/server.py b/backend/server.py
+---index c254907..8c6e336 100644
+------ a/backend/server.py
+---+++ b/backend/server.py
+---@@ -192,6 +192,10 @@ async def get_settings():
+---         default_settings = HotelSettings()
+---         await db.settings.insert_one(default_settings.dict())
+---         return default_settings.dict()
+---+    
+---+    # Remove MongoDB ObjectId to avoid serialization issues
+---+    if "_id" in settings:
+---+        del settings["_id"]
+---     return settings
+--- 
+--- @api_router.put("/settings")
+---@@ -207,15 +211,21 @@ async def update_settings(total_rooms: int = 24, high_season_target: float = 85.
+---         await db.settings.insert_one(new_settings.dict())
+---         return new_settings.dict()
+---     
+---+    # Update using MongoDB _id or custom id field
+---+    query_field = "_id" if "_id" in settings else "id"
+---     await db.settings.update_one(
+----        {"id": settings["id"]},
+---+        {query_field: settings[query_field]},
+---         {"$set": {
+---             "total_rooms": total_rooms,
+---             "high_season_target": high_season_target,
+---             "low_season_target": low_season_target
+---         }}
+---     )
+----    return await db.settings.find_one()
+---+    updated_settings = await db.settings.find_one()
+---+    # Remove MongoDB ObjectId to avoid serialization issues
+---+    if "_id" in updated_settings:
+---+        del updated_settings["_id"]
+---+    return updated_settings
+--- 
+--- @api_router.post("/upload/reservations")
+--- async def upload_reservations(file: UploadFile = File(...)):
+---diff --git a/test_result.md b/test_result.md
+---index c1c6526..3e009b0 100644
+------ a/test_result.md
+---+++ b/test_result.md
+---@@ -111,11 +111,14 @@ backend:
+---     file: "/app/backend/server.py"
+---     stuck_count: 0
+---     priority: "high"
+----    needs_retesting: true
+---+    needs_retesting: false
+---     status_history:
+---         - working: true
+---           agent: "main"
+---           comment: "GET /api/dashboard returns complete dashboard data with status, rhythm, today stats, radar 14 days, week and month aggregations"
+---+        - working: true
+---+          agent: "testing"
+---+          comment: "✅ TESTED: Dashboard API fully functional - returns complete data structure with status (yellow), rhythm, today stats (46.2% occupancy, €2275.51 revenue), 14-day radar forecast, week/month aggregations, and alerts array"
+--- 
+---   - task: "CSV upload for reservations"
+---     implemented: true
+---@@ -123,11 +126,14 @@ backend:
+---     file: "/app/backend/server.py"
+---     stuck_count: 0
+---     priority: "high"
+----    needs_retesting: true
+---+    needs_retesting: false
+---     status_history:
+---         - working: true
+---           agent: "main"
+---           comment: "POST /api/upload/reservations accepts CSV files, parses multiple date formats, and recalculates daily stats"
+---+        - working: true
+---+          agent: "testing"
+---+          comment: "✅ TESTED: CSV upload working correctly - processed 10 reservations (added), handles multiple date formats, recalculates daily stats automatically"
+--- 
+---   - task: "Seed demo data endpoint"
+---     implemented: true
+---@@ -135,23 +141,32 @@ backend:
+---     file: "/app/backend/server.py"
+---     stuck_count: 0
+---     priority: "medium"
+----    needs_retesting: true
+---+    needs_retesting: false
+---     status_history:
+---         - working: true
+---           agent: "main"
+---           comment: "POST /api/seed-demo-data generates realistic hotel reservation data for testing"
+---+        - working: true
+---+          agent: "testing"
+---+          comment: "✅ TESTED: Demo data seeding working perfectly - created 313 realistic reservations with varied occupancy patterns, revenue calculations, and proper date ranges"
+--- 
+---   - task: "Settings API"
+---     implemented: true
+---     working: true
+---     file: "/app/backend/server.py"
+----    stuck_count: 0
+---+    stuck_count: 1
+---     priority: "low"
+----    needs_retesting: true
+---+    needs_retesting: false
+---     status_history:
+---         - working: true
+---           agent: "main"
+---           comment: "GET/PUT /api/settings for hotel configuration (rooms, season targets)"
+---+        - working: false
+---+          agent: "testing"
+---+          comment: "❌ CRITICAL BUG FOUND: Settings API failing with MongoDB ObjectId serialization error (HTTP 520). Root cause: FastAPI cannot serialize MongoDB ObjectId objects to JSON"
+---+        - working: true
+---+          agent: "testing"
+---+          comment: "✅ FIXED & TESTED: Settings API now working - fixed ObjectId serialization by removing _id field before response. GET returns all required fields (total_rooms: 24, targets: 85%/65%), PUT updates work correctly"
+--- 
+--- frontend:
+---   - task: "Executive Dashboard UI"
+---@@ -181,18 +196,17 @@ frontend:
+--- metadata:
+---   created_by: "main_agent"
+---   version: "1.0"
+----  test_sequence: 1
+---+  test_sequence: 2
+---   run_ui: false
+--- 
+--- test_plan:
+----  current_focus:
+----    - "Dashboard API endpoint"
+----    - "CSV upload for reservations"
+----    - "Seed demo data endpoint"
+---+  current_focus: []
+---   stuck_tasks: []
+---   test_all: false
+---   test_priority: "high_first"
+--- 
+--- agent_communication:
+---     - agent: "main"
+----      message: "Initial MVP implementation complete. Backend APIs for dashboard, CSV upload, and demo data are working. Frontend executive dashboard and admin screen are functional. Please test the backend APIs."
+---\ No newline at end of file
+---+      message: "Initial MVP implementation complete. Backend APIs for dashboard, CSV upload, and demo data are working. Frontend executive dashboard and admin screen are functional. Please test the backend APIs."
+---+    - agent: "testing"
+---+      message: "✅ BACKEND TESTING COMPLETE: All 4 backend APIs tested and working. Found and FIXED critical MongoDB ObjectId serialization bug in Settings API. Dashboard API returns complete data structure, CSV upload processes files correctly, demo data seeding creates realistic reservations, settings API handles GET/PUT operations properly. All endpoints return correct HTTP status codes and data structures. Backend is production-ready."
+---\ No newline at end of file
