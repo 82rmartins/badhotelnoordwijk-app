@@ -134,8 +134,68 @@ export async function loadCachedDashboard(): Promise<any | null> {
 export async function clearAllData(): Promise<void> {
   try {
     await AsyncStorage.multiRemove(Object.values(STORAGE_KEYS));
+    console.log('All data cleared successfully');
   } catch (error) {
     console.error('Error clearing data:', error);
     throw error;
+  }
+}
+
+// NEW: Save Mews report data directly (REPLACES existing data)
+export async function saveMewsData(data: Partial<MewsReportStore>): Promise<void> {
+  try {
+    // Load existing data
+    const existing = await loadMewsData();
+    
+    // Merge with new data (replace, don't append)
+    const updated: MewsReportStore = {
+      lastUpdate: new Date().toISOString(),
+      daily: data.daily || existing.daily,
+      weekly: data.weekly || existing.weekly,
+      monthly: data.monthly || existing.monthly,
+    };
+    
+    await AsyncStorage.setItem(STORAGE_KEYS.MEWS_DATA, JSON.stringify(updated));
+    await AsyncStorage.setItem(STORAGE_KEYS.LAST_UPDATE, new Date().toISOString());
+    console.log('Mews data saved:', { daily: updated.daily.length, weekly: updated.weekly.length, monthly: updated.monthly.length });
+  } catch (error) {
+    console.error('Error saving Mews data:', error);
+    throw error;
+  }
+}
+
+// NEW: Load Mews report data
+export async function loadMewsData(): Promise<MewsReportStore> {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.MEWS_DATA);
+    if (data) {
+      return JSON.parse(data);
+    }
+    return { lastUpdate: '', daily: [], weekly: [], monthly: [] };
+  } catch (error) {
+    console.error('Error loading Mews data:', error);
+    return { lastUpdate: '', daily: [], weekly: [], monthly: [] };
+  }
+}
+
+// NEW: Get today's data from Mews store
+export async function getTodayData(): Promise<MewsDailyData | null> {
+  try {
+    const mewsData = await loadMewsData();
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Look in daily data first
+    if (mewsData.daily.length > 0) {
+      const todayData = mewsData.daily.find(d => d.date === today);
+      if (todayData) return todayData;
+      
+      // If no exact match, return most recent
+      return mewsData.daily[mewsData.daily.length - 1];
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error getting today data:', error);
+    return null;
   }
 }
