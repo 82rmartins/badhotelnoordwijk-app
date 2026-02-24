@@ -239,7 +239,7 @@ export default function AdminScreen() {
     } finally {
       setUploading(false);
     }
-  }, [language, t, settings.total_rooms]);
+  }, [language, t, settings.total_rooms, handleWebFileUpload]);
 
   const seedDemoData = useCallback(async () => {
     try {
