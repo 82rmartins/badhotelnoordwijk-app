@@ -867,14 +867,14 @@ export default function Dashboard() {
           {/* Week Stats Swipeable */}
           <Text style={styles.subSectionTitle}>{language === 'en' ? 'Weekly Stats' : 'Weekstatistieken'}</Text>
           <ScrollView ref={weekScrollRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={handleScroll(setCurrentWeekIndex)} snapToInterval={CARD_WIDTH} decelerationRate="fast" contentContainerStyle={{ paddingHorizontal: 16 }}>
-            {weekOffsets.map((offset, i) => <WeekStatsCard key={i} weekOffset={offset} reservations={reservations} settings={settings} />)}
+            {weekOffsets.map((offset, i) => <WeekStatsCard key={i} weekOffset={offset} mewsData={mewsDataState} settings={settings} />)}
           </ScrollView>
           <PaginationDots total={5} current={currentWeekIndex} />
 
           {/* Month Stats Swipeable */}
           <Text style={styles.subSectionTitle}>{language === 'en' ? 'Monthly Stats' : 'Maandstatistieken'}</Text>
           <ScrollView ref={monthScrollRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={handleScroll(setCurrentMonthIndex)} snapToInterval={CARD_WIDTH} decelerationRate="fast" contentContainerStyle={{ paddingHorizontal: 16 }}>
-            {monthOffsets.map((offset, i) => <MonthStatsCard key={i} monthOffset={offset} reservations={reservations} settings={settings} />)}
+            {monthOffsets.map((offset, i) => <MonthStatsCard key={i} monthOffset={offset} mewsData={mewsDataState} settings={settings} />)}
           </ScrollView>
           <PaginationDots total={6} current={currentMonthIndex} />
         </View>
