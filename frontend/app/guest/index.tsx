@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
   coffeeBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1F1F23', borderRadius: 12, padding: 14, marginBottom: 20, gap: 10 },
   coffeeBannerText: { fontSize: 14, color: '#FFFFFF', fontWeight: '500' },
   quickActionsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 },
-  quickAction: { width: (width - 44) / 2, backgroundColor: '#111113', borderRadius: 16, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: '#1F1F23' },
+  quickAction: { width: '48%', minWidth: 150, backgroundColor: '#111113', borderRadius: 16, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: '#1F1F23' },
   quickActionIcon: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   quickActionLabel: { fontSize: 14, fontWeight: '600', color: '#FFFFFF', textAlign: 'center' },
   footerSpacer: { height: 40 },
