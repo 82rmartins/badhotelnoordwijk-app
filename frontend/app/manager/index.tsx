@@ -31,35 +31,75 @@ function buildDashboardFromMews(mewsData: MewsReportStore, settings: HotelSettin
   today.setHours(0, 0, 0, 0);
   const todayStr = today.toISOString().split('T')[0];
   
-  // Find today's data
-  const todayMews = mewsData.daily.find(d => d.date === todayStr);
+  // Combine ALL data sources for lookup
+  const allData = [...mewsData.daily, ...mewsData.weekly, ...mewsData.monthly];
+  console.log('All data combined:', allData.length, 'records');
+  
+  // Find the most recent data to display as "today"
+  // Sort by date descending and get the latest
+  const sortedData = [...allData].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const latestData = sortedData.length > 0 ? sortedData[0] : null;
+  
+  // Calculate averages from all available data
+  let totalOcc = 0, totalRev = 0, totalAdr = 0, dataCount = 0;
+  for (const d of allData) {
+    if (d.occupancy > 0) {
+      totalOcc += d.occupancy;
+      totalRev += d.revenue;
+      totalAdr += d.adr;
+      dataCount++;
+    }
+  }
+  
+  const avgOcc = dataCount > 0 ? totalOcc / dataCount : 0;
+  const avgRev = dataCount > 0 ? totalRev / dataCount : 0;
+  const avgAdr = dataCount > 0 ? totalAdr / dataCount : 0;
+  
+  console.log('Calculated averages:', { avgOcc, avgRev, avgAdr, dataCount });
+  
+  // Use latest data or averages for today display
   const todayData: DailyStats = {
     date: today,
-    occupancy_percent: todayMews?.occupancy || 0,
-    rooms_occupied: todayMews?.occupiedRooms || 0,
-    total_rooms: todayMews?.availableRooms || settings.total_rooms,
-    arrivals: todayMews?.arrivals || 0,
-    departures: todayMews?.departures || 0,
-    room_revenue: todayMews?.revenue || 0,
+    occupancy_percent: latestData?.occupancy || avgOcc,
+    rooms_occupied: latestData?.occupiedRooms || Math.round((avgOcc / 100) * settings.total_rooms),
+    total_rooms: latestData?.availableRooms || settings.total_rooms,
+    arrivals: latestData?.arrivals || 0,
+    departures: latestData?.departures || 0,
+    room_revenue: latestData?.revenue || avgRev,
     parking_revenue: 0,
     vending_revenue: 0,
     city_tax: 0,
-    adr: todayMews?.adr || 0,
+    adr: latestData?.adr || avgAdr,
   };
   
-  // Build radar (next 14 days) from daily data
+  // Build radar from available data
   const radar: RadarDay[] = [];
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const target = settings.high_season_target;
   
+  // If we have weekly/monthly data, use it for radar
+  // Otherwise show the average for all days
   for (let i = 0; i < 14; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
     const dateStr = d.toISOString().split('T')[0];
     
-    const dayData = mewsData.daily.find(m => m.date === dateStr);
-    const target = settings.high_season_target;
-    const occ = dayData?.occupancy || 0;
+    // Try to find matching data in any source
+    let dayData = allData.find(m => m.date === dateStr);
+    
+    // If no exact match, use data from same weekday if we have weekly data
+    if (!dayData && mewsData.weekly.length > 0) {
+      const weekDataForDay = mewsData.weekly.find(w => {
+        const wDate = new Date(w.date);
+        return wDate.getDay() === d.getDay();
+      });
+      if (weekDataForDay) dayData = weekDataForDay;
+    }
+    
+    // Use average if still no data
+    const occ = dayData?.occupancy || avgOcc;
+    const rooms = dayData?.occupiedRooms || Math.round((occ / 100) * settings.total_rooms);
     
     radar.push({
       date: d,
@@ -67,65 +107,63 @@ function buildDashboardFromMews(mewsData: MewsReportStore, settings: HotelSettin
       day_num: d.getDate(),
       month: monthNames[d.getMonth()],
       occupancy_percent: occ,
-      rooms_sold: dayData?.occupiedRooms || 0,
+      rooms_sold: rooms,
       total_rooms: dayData?.availableRooms || settings.total_rooms,
-      adr: dayData?.adr || 0,
+      adr: dayData?.adr || avgAdr,
       target: target,
       urgency: occ < target * 0.7 ? 'high' : occ < target * 0.9 ? 'medium' : 'low',
     });
   }
   
-  // Calculate week stats
+  // Calculate week stats from weekly data or averages
   const weekStart = new Date(today);
   weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
   
-  let weekOccTotal = 0, weekRevTotal = 0, weekAdrTotal = 0, weekDays = 0;
+  // Use weekly data if available, otherwise use averages
+  let weekOccAvg = avgOcc;
+  let weekRevTotal = avgRev * 7;
+  let weekAdrAvg = avgAdr;
   
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(weekStart);
-    d.setDate(weekStart.getDate() + i);
-    const dateStr = d.toISOString().split('T')[0];
-    const dayData = mewsData.daily.find(m => m.date === dateStr);
-    if (dayData) {
-      weekOccTotal += dayData.occupancy;
-      weekRevTotal += dayData.revenue;
-      weekAdrTotal += dayData.adr;
-      weekDays++;
-    }
+  if (mewsData.weekly.length > 0) {
+    const currentWeekData = mewsData.weekly[0]; // Most recent week
+    weekOccAvg = currentWeekData.occupancy;
+    weekRevTotal = currentWeekData.revenue;
+    weekAdrAvg = currentWeekData.adr;
   }
   
-  // Calculate month stats
-  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  // Calculate month stats from monthly data or averages
   const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-  let monthOccTotal = 0, monthRevTotal = 0, monthDays = 0;
+  let monthOccAvg = avgOcc;
+  let monthRevTotal = avgRev * today.getDate();
   
-  for (let i = 0; i < today.getDate(); i++) {
-    const d = new Date(monthStart);
-    d.setDate(monthStart.getDate() + i);
-    const dateStr = d.toISOString().split('T')[0];
-    const dayData = mewsData.daily.find(m => m.date === dateStr);
-    if (dayData) {
-      monthOccTotal += dayData.occupancy;
-      monthRevTotal += dayData.revenue;
-      monthDays++;
+  if (mewsData.monthly.length > 0) {
+    // Find current month data
+    const currentMonthName = monthNames[today.getMonth()];
+    const currentMonthData = mewsData.monthly.find(m => {
+      const mDate = new Date(m.date);
+      return mDate.getMonth() === today.getMonth();
+    }) || mewsData.monthly[0];
+    
+    if (currentMonthData) {
+      monthOccAvg = currentMonthData.occupancy;
+      monthRevTotal = currentMonthData.revenue;
     }
   }
   
-  // Determine status
+  // Determine status based on available data
   let status: 'green' | 'yellow' | 'red' = 'green';
   let statusReason: string | null = null;
   const statusReasonParams: string[] = [];
   
-  const todayOcc = todayData.occupancy_percent;
-  const target = settings.high_season_target;
+  const displayOcc = todayData.occupancy_percent;
   
-  if (todayOcc < target * 0.7) {
+  if (displayOcc < target * 0.7) {
     status = 'red';
     statusReason = 'today_occupancy_below';
     statusReasonParams.push(`${Math.round(target * 0.7)}%`);
-  } else if (todayOcc < target * 0.9) {
+  } else if (displayOcc < target * 0.9) {
     status = 'yellow';
     statusReason = 'today_occupancy_below';
     statusReasonParams.push(`${Math.round(target * 0.9)}%`);
@@ -134,10 +172,52 @@ function buildDashboardFromMews(mewsData: MewsReportStore, settings: HotelSettin
   // Build alerts
   const alerts: EnhancedAlert[] = [];
   
-  // Check for low occupancy days in next 7 days
-  const lowDays = radar.slice(0, 7).filter(d => d.occupancy_percent > 0 && d.occupancy_percent < target * 0.7);
-  if (lowDays.length > 0) {
+  if (dataCount > 0) {
     alerts.push({
+      message: avgOcc >= target * 0.9 ? 'no_critical_issues' : 'occupancy_below_target',
+      message_params: [Math.round(avgOcc).toString() + '%'],
+      today_status: avgOcc >= target * 0.9 ? 'ok' : avgOcc >= target * 0.7 ? 'warning' : 'critical',
+      future_status: avgOcc >= target * 0.9 ? 'ok' : 'warning',
+      context: avgOcc >= target * 0.9 ? 'next_days_on_track' : 'requires_attention',
+    });
+  } else {
+    alerts.push({
+      message: 'no_critical_issues',
+      message_params: [],
+      today_status: 'ok',
+      future_status: 'ok',
+      context: 'next_days_on_track',
+    });
+  }
+  
+  return {
+    status,
+    status_reason: statusReason,
+    status_reason_params: statusReasonParams,
+    rhythm: 'stable',
+    trend: 'stable',
+    last_update: lastUpdate,
+    today: todayData,
+    radar,
+    alerts,
+    week: {
+      start: weekStart,
+      end: weekEnd,
+      occupancy_avg: weekOccAvg,
+      revenue_total: weekRevTotal,
+      adr_avg: weekAdrAvg,
+      trend: 'stable',
+    },
+    month: {
+      name: monthNames[today.getMonth()],
+      occupancy_accumulated: monthOccAvg,
+      revenue_accumulated: monthRevTotal,
+      projected_occupancy: monthOccAvg,
+      days_elapsed: today.getDate(),
+      days_total: monthEnd.getDate(),
+    },
+  };
+}
       message: 'critical_days_ahead',
       message_params: [lowDays.length.toString()],
       today_status: todayOcc >= target * 0.9 ? 'ok' : todayOcc >= target * 0.7 ? 'warning' : 'critical',
