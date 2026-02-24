@@ -43,31 +43,49 @@ export default function LoginScreen() {
   const { login } = useAuth();
   const { language } = useLanguage();
 
-  const t = language === 'en' ? {
-    title: 'Manager Login',
-    subtitle: 'Access the operations dashboard',
-    email: 'Email',
-    emailPlaceholder: 'your@email.com',
-    password: 'Password',
-    passwordPlaceholder: 'Enter password',
-    login: 'Login',
-    back: 'Back to Home',
-    error: 'Login Failed',
-    errorMessage: 'Email not authorized or invalid password. Please contact admin.',
-    emptyFields: 'Please fill all fields',
-  } : {
-    title: 'Manager Login',
-    subtitle: 'Toegang tot het operaties dashboard',
-    email: 'E-mail',
-    emailPlaceholder: 'uw@email.com',
-    password: 'Wachtwoord',
-    passwordPlaceholder: 'Voer wachtwoord in',
-    login: 'Inloggen',
-    back: 'Terug naar Home',
-    error: 'Login Mislukt',
-    errorMessage: 'E-mail niet geautoriseerd of ongeldig wachtwoord. Neem contact op met admin.',
-    emptyFields: 'Vul alle velden in',
+  const translations: Record<string, any> = {
+    en: {
+      title: 'Manager Login',
+      subtitle: 'Access the operations dashboard',
+      email: 'Email',
+      emailPlaceholder: 'your@email.com',
+      password: 'Password',
+      passwordPlaceholder: 'Enter password',
+      login: 'Login',
+      back: 'Back to Home',
+      error: 'Login Failed',
+      errorMessage: 'Email not authorized or invalid password. Please contact admin.',
+      emptyFields: 'Please fill all fields',
+    },
+    nl: {
+      title: 'Manager Login',
+      subtitle: 'Toegang tot het operaties dashboard',
+      email: 'E-mail',
+      emailPlaceholder: 'uw@email.com',
+      password: 'Wachtwoord',
+      passwordPlaceholder: 'Voer wachtwoord in',
+      login: 'Inloggen',
+      back: 'Terug naar Home',
+      error: 'Login Mislukt',
+      errorMessage: 'E-mail niet geautoriseerd of ongeldig wachtwoord. Neem contact op met admin.',
+      emptyFields: 'Vul alle velden in',
+    },
+    de: {
+      title: 'Manager Login',
+      subtitle: 'Zugang zum Operations-Dashboard',
+      email: 'E-Mail',
+      emailPlaceholder: 'ihre@email.com',
+      password: 'Passwort',
+      passwordPlaceholder: 'Passwort eingeben',
+      login: 'Anmelden',
+      back: 'Zurück zur Startseite',
+      error: 'Anmeldung fehlgeschlagen',
+      errorMessage: 'E-Mail nicht autorisiert oder ungültiges Passwort. Bitte kontaktieren Sie den Admin.',
+      emptyFields: 'Bitte alle Felder ausfüllen',
+    }
   };
+  
+  const t = translations[language] || translations.en;
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
