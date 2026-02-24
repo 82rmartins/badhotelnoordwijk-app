@@ -56,6 +56,8 @@ function buildDashboardFromMews(mewsData: MewsReportStore, settings: HotelSettin
   // Find today's data specifically
   const todayDataFromFile = mewsData.daily.find(d => d.date === todayStr);
   
+  console.log('Looking for today:', todayStr, 'Found:', todayDataFromFile ? 'YES' : 'NO');
+  
   // Calculate averages from all available data
   let totalOcc = 0, totalRev = 0, totalAdr = 0, dataCount = 0;
   for (const d of allData) {
