@@ -1,12 +1,14 @@
 // XLSX Parser for Mews Manager Reports
-// Supports daily, weekly, and monthly reports from Mews PMS
+// Supports daily, weekly, monthly, arrivals and departures reports from Mews PMS
 
 import * as XLSX from 'xlsx';
 import { MewsDailyData } from './storage';
 
 export interface ParsedXLSXResult {
   data: MewsDailyData[];
-  reportType: 'daily' | 'weekly' | 'monthly' | 'unknown';
+  reportType: 'daily' | 'weekly' | 'monthly' | 'arrivals' | 'departures' | 'unknown';
+  arrivalsData?: { date: string; count: number }[];
+  departuresData?: { date: string; count: number }[];
   errors: string[];
 }
 
@@ -14,7 +16,9 @@ export interface ParsedXLSXResult {
 export function parseXLSX(content: string | ArrayBuffer, totalRooms: number = 24): ParsedXLSXResult {
   const errors: string[] = [];
   const data: MewsDailyData[] = [];
-  let reportType: 'daily' | 'weekly' | 'monthly' | 'unknown' = 'unknown';
+  let reportType: 'daily' | 'weekly' | 'monthly' | 'arrivals' | 'departures' | 'unknown' = 'unknown';
+  let arrivalsData: { date: string; count: number }[] = [];
+  let departuresData: { date: string; count: number }[] = [];
 
   try {
     // Read workbook
@@ -32,7 +36,80 @@ export function parseXLSX(content: string | ArrayBuffer, totalRooms: number = 24
 
     console.log('Workbook sheets:', workbook.SheetNames);
 
-    // Check for Mews structure (should have Parameters and Data sheets)
+    // Check if this is a Reservation Report (Arrivals/Departures)
+    if (workbook.SheetNames.includes('Age categories') || workbook.SheetNames.includes('Reservations')) {
+      // This is an Arrivals or Departures report
+      const paramsSheet = workbook.Sheets['Parameters'];
+      const paramsData = XLSX.utils.sheet_to_json(paramsSheet, { header: 1 }) as any[][];
+      
+      // Detect if arrivals or departures
+      let isArrivals = false;
+      let isDepartures = false;
+      
+      for (const row of paramsData) {
+        const key = String(row[0] || '').toLowerCase();
+        const value = String(row[1] || '').toLowerCase();
+        if (key === 'mode' || key.includes('filter')) {
+          if (value.includes('arrival')) isArrivals = true;
+          if (value.includes('departure')) isDepartures = true;
+        }
+      }
+      
+      // Check filename hint from first param row
+      const firstRow = String(paramsData[0]?.[0] || '').toLowerCase();
+      if (firstRow.includes('arriv')) isArrivals = true;
+      if (firstRow.includes('depart')) isDepartures = true;
+      
+      reportType = isArrivals ? 'arrivals' : isDepartures ? 'departures' : 'arrivals';
+      
+      // Parse Age categories sheet for arrival/departure dates
+      if (workbook.SheetNames.includes('Age categories')) {
+        const ageSheet = workbook.Sheets['Age categories'];
+        const ageData = XLSX.utils.sheet_to_json(ageSheet) as any[];
+        
+        const countsByDate: Record<string, number> = {};
+        
+        for (const row of ageData) {
+          let dateValue;
+          if (reportType === 'arrivals') {
+            dateValue = row['Arrival'];
+          } else {
+            dateValue = row['Departure'];
+          }
+          
+          if (dateValue) {
+            let dateStr: string;
+            if (dateValue instanceof Date) {
+              dateStr = dateValue.toISOString().split('T')[0];
+            } else {
+              const parsed = new Date(dateValue);
+              dateStr = !isNaN(parsed.getTime()) ? parsed.toISOString().split('T')[0] : '';
+            }
+            
+            if (dateStr) {
+              countsByDate[dateStr] = (countsByDate[dateStr] || 0) + 1;
+            }
+          }
+        }
+        
+        // Convert to array
+        const resultData = Object.entries(countsByDate)
+          .map(([date, count]) => ({ date, count }))
+          .sort((a, b) => a.date.localeCompare(b.date));
+        
+        if (reportType === 'arrivals') {
+          arrivalsData = resultData;
+          console.log('Parsed arrivals:', arrivalsData.length, 'days');
+        } else {
+          departuresData = resultData;
+          console.log('Parsed departures:', departuresData.length, 'days');
+        }
+      }
+      
+      return { data, reportType, arrivalsData, departuresData, errors };
+    }
+
+    // Check for Manager Report structure (should have Parameters and Data sheets)
     if (!workbook.SheetNames.includes('Data')) {
       errors.push('Invalid Mews report: Missing "Data" sheet');
       return { data, reportType, errors };
@@ -99,7 +176,7 @@ export function parseXLSX(content: string | ArrayBuffer, totalRooms: number = 24
         } else if (metric === 'available') {
           availableRow = row;
           console.log('Found available row');
-        } else if ((metric === 'revenue' || metric.includes('total revenue')) && !metric.includes('per') && !metric.includes('direct')) {
+        } else if ((metric.includes('revenue') && metric.includes('night')) && !metric.includes('per') && !metric.includes('direct')) {
           revenueRow = row;
           console.log('Found revenue row');
         } else if (metric.includes('average rate') || metric.includes('adr')) {
@@ -128,7 +205,7 @@ export function parseXLSX(content: string | ArrayBuffer, totalRooms: number = 24
 
       let occupancy = parseNum(occupancyRow, colIndex);
       const occupied = parseNum(occupiedRow, colIndex);
-      const available = parseNum(availableRow, colIndex);
+      const availableFromFile = parseNum(availableRow, colIndex);
       const revenue = parseNum(revenueRow, colIndex);
       const adr = parseNum(adrRow, colIndex);
       const customers = parseNum(customersRow, colIndex);
@@ -144,15 +221,26 @@ export function parseXLSX(content: string | ArrayBuffer, totalRooms: number = 24
       // Parse period to date
       const periodDate = parsePeriodToDate(periods[i], reportType);
 
+      // ALWAYS use totalRooms (24) instead of file value (might be 21 due to out-of-order)
+      const roomsToUse = totalRooms;
+      
+      // Recalculate occupancy based on 24 rooms if needed
+      let adjustedOccupancy = occupancy;
+      if (availableFromFile > 0 && availableFromFile !== totalRooms && occupied > 0) {
+        // Recalculate: if file says 21 available and 10 occupied = 47.6%
+        // But with 24 rooms: 10/24 = 41.7%
+        adjustedOccupancy = (occupied / totalRooms) * 100;
+      }
+
       data.push({
         date: periodDate,
-        occupancy: Math.round(occupancy * 10) / 10,
+        occupancy: Math.round(adjustedOccupancy * 10) / 10,
         occupiedRooms: Math.round(occupied),
-        availableRooms: Math.round(available) || totalRooms,
+        availableRooms: roomsToUse, // Always 24
         revenue: Math.round(revenue * 100) / 100,
         adr: Math.round(adr * 100) / 100,
-        arrivals: 0, // Not in this report format
-        departures: 0,
+        arrivals: 0, // Will be filled from arrivals report
+        departures: 0, // Will be filled from departures report
         customers: Math.round(customers),
       });
     }
@@ -168,7 +256,7 @@ export function parseXLSX(content: string | ArrayBuffer, totalRooms: number = 24
     errors.push(`Parse error: ${error.message}`);
   }
 
-  return { data, reportType, errors };
+  return { data, reportType, arrivalsData, departuresData, errors };
 }
 
 // Parse period string to ISO date
