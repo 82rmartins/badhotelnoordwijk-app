@@ -60,95 +60,108 @@ export default function AdminScreen() {
     }
   };
 
-  // Web-specific file upload using native input
-  const handleWebFileUpload = useCallback(async (event: any) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  // Process a single XLSX file
+  const processXLSXFile = async (content: ArrayBuffer | string, fileName: string): Promise<string> => {
+    try {
+      const { reservations, data, reportType, errors } = parseXLSX(content, settings.total_rooms);
+
+      if (data.length === 0) {
+        return `✗ ${fileName}: No valid data found`;
+      }
+
+      // Append to existing reservations instead of replacing
+      const existingReservations = await loadReservations();
+      const allReservations = [...existingReservations, ...reservations];
+      await saveReservations(allReservations);
+
+      const typeLabel = reportType === 'daily' ? 'Daily' : 
+                        reportType === 'weekly' ? 'Weekly' : 
+                        reportType === 'monthly' ? 'Monthly' : 'Report';
+      
+      return `✓ ${fileName} (${typeLabel}): ${data.length} records imported`;
+    } catch (error: any) {
+      return `✗ ${fileName}: ${error.message}`;
+    }
+  };
+
+  // Web-specific: Handle multiple files
+  const handleWebMultiFileUpload = useCallback(async (event: any) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
 
     setUploading(true);
     setLastResult(null);
 
-    try {
-      const fileName = file.name.toLowerCase();
-      const isXLSX = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+    const results: string[] = [];
+    let totalSuccess = 0;
 
-      const reader = new FileReader();
-      
-      reader.onload = async (e) => {
-        try {
-          const content = e.target?.result;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fileName = file.name;
+      const isXLSX = fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls');
+
+      try {
+        const content = await new Promise<ArrayBuffer | string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result as ArrayBuffer | string);
+          reader.onerror = () => reject(new Error('Could not read file'));
           
           if (isXLSX) {
-            // XLSX file - content is ArrayBuffer
-            const { reservations, data, reportType, errors } = parseXLSX(content as ArrayBuffer, settings.total_rooms);
-
-            if (reservations.length === 0 && data.length === 0) {
-              throw new Error(language === 'en' ? 'No valid data found in Excel file.' : language === 'nl' ? 'Geen geldige data gevonden in Excel bestand.' : 'Keine gültigen Daten in Excel-Datei gefunden.');
-            }
-
-            await saveReservations(reservations);
-            await loadCurrentData();
-
-            const typeLabel = reportType === 'daily' ? (language === 'en' ? 'Daily' : language === 'nl' ? 'Dagelijks' : 'Täglich') :
-                              reportType === 'weekly' ? (language === 'en' ? 'Weekly' : language === 'nl' ? 'Wekelijks' : 'Wöchentlich') :
-                              reportType === 'monthly' ? (language === 'en' ? 'Monthly' : language === 'nl' ? 'Maandelijks' : 'Monatlich') : '';
-            
-            const message = `✓ ${typeLabel} ${language === 'en' ? 'report imported' : language === 'nl' ? 'rapport geïmporteerd' : 'Bericht importiert'}: ${data.length} ${language === 'en' ? 'days of data' : language === 'nl' ? 'dagen aan data' : 'Tage an Daten'}`;
-            setLastResult(message);
-            Alert.alert(language === 'en' ? 'Success' : language === 'nl' ? 'Succes' : 'Erfolg', message);
+            reader.readAsArrayBuffer(file);
           } else {
-            // CSV file - content is string
-            const { reservations, errors } = parseCSV(content as string);
-
-            if (reservations.length === 0) {
-              throw new Error(language === 'en' ? 'No valid reservations found in file.' : 'Geen geldige reserveringen gevonden in bestand.');
-            }
-
-            await saveReservations(reservations);
-            await loadCurrentData();
-
-            const message = `✓ ${language === 'en' ? 'Processed' : 'Verwerkt'}: ${reservations.length} ${language === 'en' ? 'reservations imported' : 'reserveringen geïmporteerd'}`;
-            setLastResult(message);
-            Alert.alert(t.success, message);
+            reader.readAsText(file);
           }
-        } catch (parseError: any) {
-          setLastResult(`✗ ${t.error}: ${parseError.message}`);
-          Alert.alert(t.error, parseError.message);
-        } finally {
-          setUploading(false);
+        });
+
+        if (isXLSX) {
+          const result = await processXLSXFile(content as ArrayBuffer, fileName);
+          results.push(result);
+          if (result.startsWith('✓')) totalSuccess++;
+        } else {
+          // CSV file
+          const { reservations, errors } = parseCSV(content as string);
+          if (reservations.length > 0) {
+            const existingReservations = await loadReservations();
+            await saveReservations([...existingReservations, ...reservations]);
+            results.push(`✓ ${fileName}: ${reservations.length} reservations imported`);
+            totalSuccess++;
+          } else {
+            results.push(`✗ ${fileName}: No valid data found`);
+          }
         }
-      };
-
-      reader.onerror = () => {
-        setLastResult(`✗ ${t.error}: Could not read file`);
-        Alert.alert(t.error, 'Could not read file');
-        setUploading(false);
-      };
-
-      if (isXLSX) {
-        reader.readAsArrayBuffer(file);
-      } else {
-        reader.readAsText(file);
+      } catch (error: any) {
+        results.push(`✗ ${fileName}: ${error.message}`);
       }
-    } catch (error: any) {
-      setLastResult(`✗ ${t.error}: ${error.message}`);
-      Alert.alert(t.error, error.message);
-      setUploading(false);
     }
-  }, [language, t, settings.total_rooms]);
 
-  const pickAndUploadFile = useCallback(async () => {
-    // For web, we'll use a hidden file input
+    await loadCurrentData();
+    
+    const summary = `${totalSuccess}/${files.length} files imported successfully\n\n${results.join('\n')}`;
+    setLastResult(summary);
+    
+    Alert.alert(
+      totalSuccess === files.length ? (language === 'en' ? 'Success' : language === 'nl' ? 'Succes' : 'Erfolg') : 
+                                       (language === 'en' ? 'Import Complete' : language === 'nl' ? 'Import Voltooid' : 'Import Abgeschlossen'),
+      summary
+    );
+    
+    setUploading(false);
+  }, [language, settings.total_rooms]);
+
+  // Mobile-specific: Pick multiple files
+  const pickAndUploadFiles = useCallback(async () => {
+    // For web, use hidden file input with multiple
     if (Platform.OS === 'web') {
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = '.csv,.xlsx,.xls';
-      input.onchange = handleWebFileUpload;
+      input.multiple = true; // Allow multiple files
+      input.onchange = handleWebMultiFileUpload;
       input.click();
       return;
     }
 
-    // For mobile, use expo-document-picker
+    // For mobile (Expo Go), use document picker
     try {
       console.log('Starting file picker...');
       const result = await DocumentPicker.getDocumentAsync({
