@@ -134,9 +134,9 @@ export default function GuestHome() {
     setRefreshing(false);
   };
 
-  const suggestion = weather ? getWeatherSuggestion(weather)[language as 'en' | 'nl'] : '';
+  const suggestion = weather ? getWeatherSuggestion(weather)[language as 'en' | 'nl'] || getWeatherSuggestion(weather).en : '';
 
-  const t = {
+  const translations: Record<string, any> = {
     en: {
       welcome: 'Welcome to your stay',
       yourStay: 'Your Stay',
@@ -154,16 +154,19 @@ export default function GuestHome() {
       benefits: 'Voordelen',
       bookAgain: 'Opnieuw Boeken',
       freeWifi: 'Gratis WiFi & Koffie de hele dag ☕',
+    },
+    de: {
+      welcome: 'Willkommen zu Ihrem Aufenthalt',
+      yourStay: 'Ihr Aufenthalt',
+      aroundYou: 'Um Sie Herum',
+      hotelExperience: 'Hotel Erlebnis',
+      benefits: 'Vorteile',
+      bookAgain: 'Erneut Buchen',
+      freeWifi: 'Gratis WLAN & Kaffee den ganzen Tag ☕',
     }
-  }[language] || {
-    welcome: 'Welcome to your stay',
-    yourStay: 'Your Stay',
-    aroundYou: 'Around You',
-    hotelExperience: 'Hotel Experience',
-    benefits: 'Benefits',
-    bookAgain: 'Book Again',
-    freeWifi: 'Free WiFi & Coffee all day ☕',
   };
+  
+  const t = translations[language] || translations.en;
 
   return (
     <SafeAreaView style={styles.container}>
