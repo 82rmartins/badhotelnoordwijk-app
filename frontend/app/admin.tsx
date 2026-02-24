@@ -60,7 +60,95 @@ export default function AdminScreen() {
     }
   };
 
+  // Web-specific file upload using native input
+  const handleWebFileUpload = useCallback(async (event: any) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setLastResult(null);
+
+    try {
+      const fileName = file.name.toLowerCase();
+      const isXLSX = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+
+      const reader = new FileReader();
+      
+      reader.onload = async (e) => {
+        try {
+          const content = e.target?.result;
+          
+          if (isXLSX) {
+            // XLSX file - content is ArrayBuffer
+            const { reservations, data, reportType, errors } = parseXLSX(content as ArrayBuffer, settings.total_rooms);
+
+            if (reservations.length === 0 && data.length === 0) {
+              throw new Error(language === 'en' ? 'No valid data found in Excel file.' : language === 'nl' ? 'Geen geldige data gevonden in Excel bestand.' : 'Keine gültigen Daten in Excel-Datei gefunden.');
+            }
+
+            await saveReservations(reservations);
+            await loadCurrentData();
+
+            const typeLabel = reportType === 'daily' ? (language === 'en' ? 'Daily' : language === 'nl' ? 'Dagelijks' : 'Täglich') :
+                              reportType === 'weekly' ? (language === 'en' ? 'Weekly' : language === 'nl' ? 'Wekelijks' : 'Wöchentlich') :
+                              reportType === 'monthly' ? (language === 'en' ? 'Monthly' : language === 'nl' ? 'Maandelijks' : 'Monatlich') : '';
+            
+            const message = `✓ ${typeLabel} ${language === 'en' ? 'report imported' : language === 'nl' ? 'rapport geïmporteerd' : 'Bericht importiert'}: ${data.length} ${language === 'en' ? 'days of data' : language === 'nl' ? 'dagen aan data' : 'Tage an Daten'}`;
+            setLastResult(message);
+            Alert.alert(language === 'en' ? 'Success' : language === 'nl' ? 'Succes' : 'Erfolg', message);
+          } else {
+            // CSV file - content is string
+            const { reservations, errors } = parseCSV(content as string);
+
+            if (reservations.length === 0) {
+              throw new Error(language === 'en' ? 'No valid reservations found in file.' : 'Geen geldige reserveringen gevonden in bestand.');
+            }
+
+            await saveReservations(reservations);
+            await loadCurrentData();
+
+            const message = `✓ ${language === 'en' ? 'Processed' : 'Verwerkt'}: ${reservations.length} ${language === 'en' ? 'reservations imported' : 'reserveringen geïmporteerd'}`;
+            setLastResult(message);
+            Alert.alert(t.success, message);
+          }
+        } catch (parseError: any) {
+          setLastResult(`✗ ${t.error}: ${parseError.message}`);
+          Alert.alert(t.error, parseError.message);
+        } finally {
+          setUploading(false);
+        }
+      };
+
+      reader.onerror = () => {
+        setLastResult(`✗ ${t.error}: Could not read file`);
+        Alert.alert(t.error, 'Could not read file');
+        setUploading(false);
+      };
+
+      if (isXLSX) {
+        reader.readAsArrayBuffer(file);
+      } else {
+        reader.readAsText(file);
+      }
+    } catch (error: any) {
+      setLastResult(`✗ ${t.error}: ${error.message}`);
+      Alert.alert(t.error, error.message);
+      setUploading(false);
+    }
+  }, [language, t, settings.total_rooms]);
+
   const pickAndUploadFile = useCallback(async () => {
+    // For web, we'll use a hidden file input
+    if (Platform.OS === 'web') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.csv,.xlsx,.xls';
+      input.onchange = handleWebFileUpload;
+      input.click();
+      return;
+    }
+
+    // For mobile, use expo-document-picker
     try {
       console.log('Starting file picker...');
       const result = await DocumentPicker.getDocumentAsync({
