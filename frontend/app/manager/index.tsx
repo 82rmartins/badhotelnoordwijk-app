@@ -17,13 +17,169 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-import { loadReservations, loadSettings, getLastUpdate, DEFAULT_SETTINGS, saveSettings, saveReservations, loadMewsData, MewsDailyData, MewsReportStore } from '../../utils/storage';
+import { loadReservations, loadSettings, getLastUpdate, DEFAULT_SETTINGS, saveSettings, saveReservations, loadMewsData, MewsDailyData, MewsReportStore, HotelSettings } from '../../utils/storage';
 import { calculateDashboard, DashboardData, generateDemoReservations, calculateDailyStats, DailyStats } from '../../utils/calculations';
 import { useLanguage } from '../../utils/LanguageContext';
 import { getDayNames, getMonthNames, getFullMonthNames } from '../../utils/i18n';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - 32;
+
+// Build dashboard data from Mews reports
+function buildDashboardFromMews(mewsData: MewsReportStore, settings: HotelSettings, lastUpdate: string | null): DashboardData {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayStr = today.toISOString().split('T')[0];
+  
+  // Find today's data
+  const todayData = mewsData.daily.find(d => d.date === todayStr) || {
+    date: todayStr,
+    occupancy: 0,
+    occupiedRooms: 0,
+    availableRooms: settings.total_rooms,
+    revenue: 0,
+    adr: 0,
+    arrivals: 0,
+    departures: 0,
+    customers: 0,
+  };
+  
+  // Build radar (next 14 days) from daily data
+  const radar = [];
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    const dateStr = d.toISOString().split('T')[0];
+    
+    const dayData = mewsData.daily.find(m => m.date === dateStr);
+    const target = settings.high_season_target;
+    
+    radar.push({
+      date: dateStr,
+      day_num: d.getDate(),
+      occupancy_percent: dayData?.occupancy || 0,
+      rooms_sold: dayData?.occupiedRooms || 0,
+      total_rooms: dayData?.availableRooms || settings.total_rooms,
+      adr: dayData?.adr || 0,
+      target: target,
+      urgency: !dayData ? 'none' : 
+               dayData.occupancy < target * 0.7 ? 'high' : 
+               dayData.occupancy < target * 0.9 ? 'medium' : 'low',
+    });
+  }
+  
+  // Calculate week stats
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  let weekOccTotal = 0, weekRevTotal = 0, weekAdrTotal = 0, weekDays = 0;
+  
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    const dateStr = d.toISOString().split('T')[0];
+    const dayData = mewsData.daily.find(m => m.date === dateStr);
+    if (dayData) {
+      weekOccTotal += dayData.occupancy;
+      weekRevTotal += dayData.revenue;
+      weekAdrTotal += dayData.adr;
+      weekDays++;
+    }
+  }
+  
+  // Calculate month stats
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  let monthOccTotal = 0, monthRevTotal = 0, monthDays = 0;
+  
+  for (let i = 0; i < today.getDate(); i++) {
+    const d = new Date(monthStart);
+    d.setDate(monthStart.getDate() + i);
+    const dateStr = d.toISOString().split('T')[0];
+    const dayData = mewsData.daily.find(m => m.date === dateStr);
+    if (dayData) {
+      monthOccTotal += dayData.occupancy;
+      monthRevTotal += dayData.revenue;
+      monthDays++;
+    }
+  }
+  
+  // Determine status
+  let status: 'green' | 'yellow' | 'red' = 'green';
+  let statusReason: string | null = null;
+  const statusReasonParams: string[] = [];
+  
+  const todayOcc = todayData.occupancy;
+  const target = settings.high_season_target;
+  
+  if (todayOcc < target * 0.7) {
+    status = 'red';
+    statusReason = 'today_occupancy_below';
+    statusReasonParams.push(`${target * 0.7}%`);
+  } else if (todayOcc < target * 0.9) {
+    status = 'yellow';
+    statusReason = 'today_occupancy_below';
+    statusReasonParams.push(`${target * 0.9}%`);
+  }
+  
+  // Build alerts
+  const alerts = [];
+  
+  // Check for low occupancy days in next 7 days
+  const lowDays = radar.slice(0, 7).filter(d => d.occupancy_percent > 0 && d.occupancy_percent < target * 0.7);
+  if (lowDays.length > 0) {
+    alerts.push({
+      type: 'warning',
+      message: 'critical_days_ahead',
+      message_params: [lowDays.length.toString()],
+      today_status: todayOcc >= target * 0.9 ? 'ok' : todayOcc >= target * 0.7 ? 'warning' : 'critical',
+      future_status: 'warning',
+      context: 'requires_attention',
+    });
+  } else {
+    alerts.push({
+      type: 'success',
+      message: 'no_critical_issues',
+      message_params: [],
+      today_status: 'ok',
+      future_status: 'ok',
+      context: 'next_days_on_track',
+    });
+  }
+  
+  return {
+    status,
+    status_reason: statusReason,
+    status_reason_params: statusReasonParams,
+    trend: 'stable',
+    last_update: lastUpdate,
+    today: {
+      date: todayStr,
+      occupancy_percent: todayData.occupancy,
+      rooms_occupied: todayData.occupiedRooms,
+      total_rooms: todayData.availableRooms || settings.total_rooms,
+      arrivals: todayData.arrivals,
+      departures: todayData.departures,
+      room_revenue: todayData.revenue,
+      parking_revenue: 0,
+      vending_revenue: 0,
+      city_tax: 0,
+      adr: todayData.adr,
+    },
+    radar,
+    alerts,
+    week: {
+      occupancy_avg: weekDays > 0 ? weekOccTotal / weekDays : 0,
+      revenue_total: weekRevTotal,
+      adr_avg: weekDays > 0 ? weekAdrTotal / weekDays : 0,
+    },
+    month: {
+      occupancy_accumulated: monthDays > 0 ? monthOccTotal / monthDays : 0,
+      revenue_accumulated: monthRevTotal,
+      days_passed: today.getDate(),
+      days_total: monthEnd.getDate(),
+    },
+  };
+}
 
 // Hotel Logo Component
 const HotelLogo = ({ size = 40 }: { size?: number }) => (
