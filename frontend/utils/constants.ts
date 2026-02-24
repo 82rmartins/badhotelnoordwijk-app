@@ -3,8 +3,10 @@ export const HOTEL_CONFIG = {
   name: 'BadHotel Noordwijk',
   total_rooms: 24, // 20 double + 2 triple + 2 single
   address: 'Julianastraat 32, 2202KD, Noordwijk',
-  phone: '+31 88 5237 224',
-  whatsapp: '+31 620701906',
+  phone: '+31 6 22 15 40 89',
+  phone_alt: '+31 88 5237 224',
+  whatsapp: '+31 6 22 15 40 89',
+  emergency: '112',
   email: 'info@badhotelnoordwijk.com',
   website: 'https://www.badhotelnoordwijk.com',
   booking_url: 'https://app.mews.com/distributor/8b8294c8-ac09-4297-831e-b31300aeaaeb',
@@ -14,8 +16,9 @@ export const HOTEL_CONFIG = {
   parking_price: 15,
   check_in: '15:00',
   check_out: '11:00',
-  wifi_network: 'BadHotel Guest',
-  wifi_password: 'Welcome2024',
+  wifi_network: 'KPN',
+  wifi_password: '', // Free WiFi - no password needed
+  wifi_instructions: 'Connect to KPN network, authorize on the web page that appears',
   terrace_close: '22:00',
 };
 
