@@ -678,7 +678,25 @@ export default function Dashboard() {
         const dashboardData = buildDashboardFromMews(mewsData, loadedSettings, lastUpdate);
         setData(dashboardData);
         
-        // Day stats from Mews daily data
+        // Combine ALL data sources for lookup
+        const allData = [...mewsData.daily, ...mewsData.weekly, ...mewsData.monthly];
+        
+        // Calculate averages from all available data
+        let totalOcc = 0, totalRev = 0, totalAdr = 0, dataCount = 0;
+        for (const d of allData) {
+          if (d.occupancy > 0) {
+            totalOcc += d.occupancy;
+            totalRev += d.revenue;
+            totalAdr += d.adr;
+            dataCount++;
+          }
+        }
+        
+        const avgOcc = dataCount > 0 ? totalOcc / dataCount : 0;
+        const avgRev = dataCount > 0 ? totalRev / dataCount : 0;
+        const avgAdr = dataCount > 0 ? totalAdr / dataCount : 0;
+        
+        // Day stats using all data or averages
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const dayStats: DailyStats[] = [];
@@ -688,47 +706,39 @@ export default function Dashboard() {
           d.setDate(today.getDate() + i);
           const dateStr = d.toISOString().split('T')[0];
           
-          // Find matching day in Mews data
-          const mewsDay = mewsData.daily.find(m => m.date === dateStr);
+          // Find matching day in ANY data source
+          let mewsDay = allData.find(m => m.date === dateStr);
           
-          if (mewsDay) {
-            dayStats.push({
-              date: d,
-              occupancy_percent: mewsDay.occupancy,
-              rooms_occupied: mewsDay.occupiedRooms,
-              total_rooms: mewsDay.availableRooms || loadedSettings.total_rooms,
-              arrivals: mewsDay.arrivals,
-              departures: mewsDay.departures,
-              room_revenue: mewsDay.revenue,
-              parking_revenue: 0,
-              vending_revenue: 0,
-              city_tax: 0,
-              adr: mewsDay.adr,
-            });
-          } else {
-            // No data for this day
-            dayStats.push({
-              date: d,
-              occupancy_percent: 0,
-              rooms_occupied: 0,
-              total_rooms: loadedSettings.total_rooms,
-              arrivals: 0,
-              departures: 0,
-              room_revenue: 0,
-              parking_revenue: 0,
-              vending_revenue: 0,
-              city_tax: 0,
-              adr: 0,
+          // If no exact match, try weekly data by day of week
+          if (!mewsDay && mewsData.weekly.length > 0) {
+            mewsDay = mewsData.weekly.find(w => {
+              const wDate = new Date(w.date);
+              return wDate.getDay() === d.getDay();
             });
           }
+          
+          // Use data if found, otherwise use averages
+          dayStats.push({
+            date: d,
+            occupancy_percent: mewsDay?.occupancy || avgOcc,
+            rooms_occupied: mewsDay?.occupiedRooms || Math.round((avgOcc / 100) * loadedSettings.total_rooms),
+            total_rooms: mewsDay?.availableRooms || loadedSettings.total_rooms,
+            arrivals: mewsDay?.arrivals || 0,
+            departures: mewsDay?.departures || 0,
+            room_revenue: mewsDay?.revenue || avgRev,
+            parking_revenue: 0,
+            vending_revenue: 0,
+            city_tax: 0,
+            adr: mewsDay?.adr || avgAdr,
+          });
         }
         setDayStatsArray(dayStats);
         
-        // Weekly chart data from daily data
-        const weekStats = mewsData.daily.slice(0, 7).map(d => ({ 
-          occupancy_percent: d.occupancy || 0 
-        }));
-        setWeekChartData(weekStats.length > 0 ? weekStats : Array(7).fill({ occupancy_percent: 0 }));
+        // Weekly chart data - use weekly data or averages
+        const weekStats = mewsData.weekly.length > 0 
+          ? mewsData.weekly.slice(0, 7).map(d => ({ occupancy_percent: d.occupancy || 0 }))
+          : Array(7).fill({ occupancy_percent: avgOcc });
+        setWeekChartData(weekStats);
         
         // Store mews data for week/month cards
         setMewsDataState(mewsData);
