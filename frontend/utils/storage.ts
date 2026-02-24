@@ -1,5 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// API URL - use backend for cloud storage
+const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+
 const STORAGE_KEYS = {
   RESERVATIONS: '@badhotel_reservations',
   SETTINGS: '@badhotel_settings',
