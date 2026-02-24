@@ -196,8 +196,7 @@ export default function AdminScreen() {
     try {
       console.log('Starting file picker...');
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['text/csv', 'text/comma-separated-values', 'application/csv', 
-               'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        type: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                'application/vnd.ms-excel', '*/*'],
         copyToCacheDirectory: true,
         multiple: true, // Allow multiple files on supported platforms
@@ -213,104 +212,77 @@ export default function AdminScreen() {
       setUploading(true);
       setLastResult(null);
 
-      const results: string[] = [];
-      let totalSuccess = 0;
+      // Collect all files content first
+      const filesData: { content: ArrayBuffer | string, fileName: string }[] = [];
 
       for (const file of result.assets) {
-        console.log('Processing file:', file.name, file.uri);
+        console.log('Reading file:', file.name, file.uri);
         const fileName = file.name.toLowerCase();
         const isXLSX = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
 
+        if (!isXLSX) {
+          console.log('Skipping non-XLSX file:', file.name);
+          continue;
+        }
+
         try {
-          let processResult = '';
+          // Try multiple methods to read the XLSX file
+          let content: ArrayBuffer | string | null = null;
+          
+          // Method 1: Try using fetch (works on most platforms)
+          try {
+            console.log('Trying fetch method...');
+            const response = await fetch(file.uri);
+            content = await response.arrayBuffer();
+            console.log('Fetch succeeded, size:', (content as ArrayBuffer).byteLength);
+          } catch (fetchError) {
+            console.log('Fetch failed:', fetchError);
+          }
 
-          if (isXLSX) {
-            // Try multiple methods to read the XLSX file
-            let content: ArrayBuffer | null = null;
-            
-            // Method 1: Try using fetch (works on most platforms)
+          // Method 2: Try FileSystem as base64
+          if (!content) {
             try {
-              console.log('Trying fetch method...');
-              const response = await fetch(file.uri);
-              content = await response.arrayBuffer();
-              console.log('Fetch succeeded, size:', content.byteLength);
-            } catch (fetchError) {
-              console.log('Fetch failed:', fetchError);
-            }
-
-            // Method 2: Try FileSystem as base64 then convert
-            if (!content) {
-              try {
-                console.log('Trying FileSystem base64 method...');
-                const base64Content = await FileSystem.readAsStringAsync(file.uri, { 
-                  encoding: FileSystem.EncodingType.Base64 
-                });
-                console.log('FileSystem succeeded, length:', base64Content.length);
-                // Keep as base64 string for the parser
-                const { reservations, data, reportType, errors } = parseXLSX(base64Content, settings.total_rooms);
-                
-                if (data.length > 0) {
-                  const existingReservations = await loadReservations();
-                  await saveReservations([...existingReservations, ...reservations]);
-                  processResult = `✓ ${file.name} (${reportType}): ${data.length} periods imported`;
-                  totalSuccess++;
-                } else {
-                  processResult = `✗ ${file.name}: ${errors.length > 0 ? errors[0] : 'No data found'}`;
-                }
-                results.push(processResult);
-                continue;
-              } catch (fsError) {
-                console.log('FileSystem failed:', fsError);
-              }
-            }
-
-            // Process with ArrayBuffer if we got it from fetch
-            if (content) {
-              const { reservations, data, reportType, errors } = parseXLSX(content, settings.total_rooms);
-              
-              if (data.length > 0) {
-                const existingReservations = await loadReservations();
-                await saveReservations([...existingReservations, ...reservations]);
-                processResult = `✓ ${file.name} (${reportType}): ${data.length} periods imported`;
-                totalSuccess++;
-              } else {
-                processResult = `✗ ${file.name}: ${errors.length > 0 ? errors[0] : 'No data found'}`;
-              }
-            } else {
-              processResult = `✗ ${file.name}: Could not read file`;
-            }
-          } else {
-            // CSV file
-            try {
-              const csvContent = await FileSystem.readAsStringAsync(file.uri);
-              const { reservations, errors } = parseCSV(csvContent);
-              
-              if (reservations.length > 0) {
-                const existingReservations = await loadReservations();
-                await saveReservations([...existingReservations, ...reservations]);
-                processResult = `✓ ${file.name}: ${reservations.length} reservations imported`;
-                totalSuccess++;
-              } else {
-                processResult = `✗ ${file.name}: No valid data found`;
-              }
-            } catch (csvError) {
-              processResult = `✗ ${file.name}: Could not read file`;
+              console.log('Trying FileSystem base64 method...');
+              const base64Content = await FileSystem.readAsStringAsync(file.uri, { 
+                encoding: FileSystem.EncodingType.Base64 
+              });
+              console.log('FileSystem succeeded, length:', base64Content.length);
+              content = base64Content; // Keep as base64 string
+            } catch (fsError) {
+              console.log('FileSystem failed:', fsError);
             }
           }
 
-          results.push(processResult);
+          if (content) {
+            filesData.push({ content, fileName: file.name });
+          } else {
+            console.log('Could not read file:', file.name);
+          }
         } catch (fileError: any) {
-          results.push(`✗ ${file.name}: ${fileError.message}`);
+          console.log('Error reading file:', file.name, fileError.message);
         }
       }
 
-      await loadCurrentData();
+      if (filesData.length === 0) {
+        Alert.alert(
+          language === 'en' ? 'Error' : language === 'nl' ? 'Fout' : 'Fehler',
+          language === 'en' ? 'No valid XLSX files could be read' : language === 'nl' ? 'Geen geldige XLSX-bestanden konden worden gelezen' : 'Keine gültigen XLSX-Dateien konnten gelesen werden'
+        );
+        setUploading(false);
+        return;
+      }
 
-      const summary = `${totalSuccess}/${result.assets.length} ${language === 'en' ? 'files imported' : language === 'nl' ? 'bestanden geïmporteerd' : 'Dateien importiert'}\n\n${results.join('\n')}`;
+      // Process all files and save (REPLACES existing data - clears first!)
+      const results = await processAndSaveXLSXFiles(filesData);
+      
+      await loadCurrentData();
+      
+      const successCount = results.filter(r => r.startsWith('✓')).length;
+      const summary = `${successCount}/${filesData.length} ${language === 'en' ? 'files imported' : language === 'nl' ? 'bestanden geïmporteerd' : 'Dateien importiert'}\n\n${results.join('\n')}\n\n${language === 'en' ? 'Previous data was replaced.' : language === 'nl' ? 'Vorige gegevens zijn vervangen.' : 'Vorherige Daten wurden ersetzt.'}`;
       setLastResult(summary);
       
       Alert.alert(
-        totalSuccess > 0 ? (language === 'en' ? 'Import Complete' : language === 'nl' ? 'Import Voltooid' : 'Import Abgeschlossen') : (language === 'en' ? 'Import Failed' : language === 'nl' ? 'Import Mislukt' : 'Import Fehlgeschlagen'),
+        successCount > 0 ? (language === 'en' ? 'Import Complete' : language === 'nl' ? 'Import Voltooid' : 'Import Abgeschlossen') : (language === 'en' ? 'Import Failed' : language === 'nl' ? 'Import Mislukt' : 'Import Fehlgeschlagen'),
         summary
       );
     } catch (error: any) {
@@ -320,7 +292,7 @@ export default function AdminScreen() {
     } finally {
       setUploading(false);
     }
-  }, [language, t, settings.total_rooms, handleWebMultiFileUpload]);
+  }, [language, t, settings.total_rooms, handleWebMultiFileUpload, processAndSaveXLSXFiles]);
 
   const seedDemoData = useCallback(async () => {
     try {
