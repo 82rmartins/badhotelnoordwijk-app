@@ -50,15 +50,9 @@ const PlaceCard = ({ name, category, lat, lng }: { name: string; category: strin
   };
 
   const openInMaps = () => {
-    const scheme = Platform.select({ ios: 'maps:0,0?q=', android: 'geo:0,0?q=' });
-    const latLng = `${lat},${lng}`;
-    const label = encodeURIComponent(name);
-    const url = Platform.select({
-      ios: `${scheme}${label}@${latLng}`,
-      android: `${scheme}${latLng}(${label})`,
-      default: `https://www.google.com/maps/search/?api=1&query=${lat},${lng}&query_place_id=${label}`,
-    });
-    Linking.openURL(url as string);
+    // For web and all platforms, use Google Maps universal URL
+    const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    Linking.openURL(googleMapsUrl);
   };
 
   const color = getCategoryColor(category);
