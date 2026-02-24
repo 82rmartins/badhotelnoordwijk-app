@@ -256,7 +256,7 @@ export default function AdminScreen() {
 
           <TouchableOpacity
             style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]}
-            onPress={pickAndUploadCSV}
+            onPress={pickAndUploadFile}
             disabled={uploading}
           >
             {uploading ? <ActivityIndicator color="#FFFFFF" /> : <Ionicons name="cloud-upload" size={24} color="#FFFFFF" />}
