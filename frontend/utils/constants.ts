@@ -20,6 +20,9 @@ export const HOTEL_CONFIG = {
   wifi_password: '', // Free WiFi - no password needed
   wifi_instructions: 'Connect to KPN network, authorize on the web page that appears',
   terrace_close: '22:00',
+  // TV Info
+  tv_password: '12345678',
+  tv_instructions: 'Our TVs are streaming-only (YouTube, Netflix, etc). No cable channels available.',
 };
 
 // Nearby Places - From Flyers (with full addresses for Google Maps)
