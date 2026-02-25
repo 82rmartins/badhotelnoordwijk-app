@@ -759,18 +759,28 @@ export default function Dashboard() {
         const avgAdr = dataCount > 0 ? totalAdr / dataCount : 0;
         
         // Day stats using all data or averages
+        // Use local date format to avoid timezone issues
         const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        today.setHours(12, 0, 0, 0); // Set to noon to avoid timezone edge cases
         const dayStats: DailyStats[] = [];
         
-        console.log('Building dayStats for today:', today.toISOString().split('T')[0]);
+        // Helper to format date as YYYY-MM-DD in local timezone
+        const formatLocalDate = (date: Date): string => {
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        };
+        
+        const todayStr = formatLocalDate(today);
+        console.log('Building dayStats for today:', todayStr, '(local timezone)');
         console.log('Mews arrivals data:', mewsData.arrivals);
         console.log('Mews departures data:', mewsData.departures);
         
         for (let i = -2; i <= 2; i++) {
           const d = new Date(today);
           d.setDate(today.getDate() + i);
-          const dateStr = d.toISOString().split('T')[0];
+          const dateStr = formatLocalDate(d);
           
           // First try to find in DAILY data (has arrivals/departures)
           let mewsDay = mewsData.daily.find(m => m.date === dateStr);
