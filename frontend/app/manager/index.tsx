@@ -382,7 +382,7 @@ const DayCard = ({ dayStats, dayLabel, isToday }: { dayStats: DailyStats | null;
         <View style={styles.dayCardOccupancy}>
           <Text style={styles.dayCardOccLabel}>{t.occupancy}</Text>
           <Text style={styles.dayCardOccValue}>{(dayStats.occupancy_percent || 0).toFixed(0)}%</Text>
-          <Text style={styles.dayCardOccRooms}>{dayStats.rooms_occupied || 0} / {dayStats.total_rooms || 26} {t.rooms}</Text>
+          <Text style={styles.dayCardOccRooms}>{dayStats.rooms_occupied || 0} / {dayStats.total_rooms || 24} {t.rooms}</Text>
         </View>
         <View style={styles.dayCardArrDep}>
           <View style={styles.dayCardArrDepItem}>
