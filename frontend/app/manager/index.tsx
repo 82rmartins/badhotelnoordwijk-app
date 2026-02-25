@@ -827,10 +827,25 @@ export default function Dashboard() {
         setDayStatsArray(dayStats);
         console.log('dayStatsArray set with', dayStats.length, 'items');
         
-        // Weekly chart data - use weekly data or averages
-        const weekStats = mewsData.weekly.length > 0 
-          ? mewsData.weekly.slice(0, 7).map(d => ({ occupancy_percent: d.occupancy || 0 }))
-          : Array(7).fill({ occupancy_percent: avgOcc });
+        // Weekly chart data - calculate from DAILY data for current week
+        const weekStats: { occupancy_percent: number }[] = [];
+        const chartWeekStart = new Date(today);
+        chartWeekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7)); // Monday of current week
+        
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(chartWeekStart);
+          d.setDate(chartWeekStart.getDate() + i);
+          const dateStr = formatLocalDate(d);
+          const dayData = mewsData.daily.find(m => m.date === dateStr);
+          
+          if (dayData) {
+            weekStats.push({ occupancy_percent: dayData.occupancy || 0 });
+          } else {
+            weekStats.push({ occupancy_percent: 0 });
+          }
+        }
+        
+        console.log('Week chart data:', weekStats.map((s, i) => `Day${i}: ${s.occupancy_percent}%`).join(', '));
         setWeekChartData(weekStats);
         
         // Store mews data for week/month cards
