@@ -782,8 +782,10 @@ export default function Dashboard() {
             city_tax: 0,
             adr: mewsDay?.adr || avgAdr,
           });
+          console.log(`Day ${dateStr}: ${arrivals} arrivals, ${departures} departures, ${mewsDay?.occupiedRooms || 0} rooms`);
         }
         setDayStatsArray(dayStats);
+        console.log('dayStatsArray set with', dayStats.length, 'items');
         
         // Weekly chart data - use weekly data or averages
         const weekStats = mewsData.weekly.length > 0 
