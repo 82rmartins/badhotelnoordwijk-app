@@ -520,6 +520,17 @@ const WeekStatsCard = ({ weekOffset, mewsData, settings }: { weekOffset: number;
   weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7) + (weekOffset * 7));
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
+  
+  // Calculate ISO week number
+  const getWeekNumber = (date: Date): number => {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  };
+  
+  const weekNumber = getWeekNumber(weekStart);
 
   // Calculate week stats from Mews data
   let totalOcc = 0, totalRev = 0, totalAdr = 0, daysWithData = 0;
