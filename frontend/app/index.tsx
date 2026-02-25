@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,6 +14,9 @@ import { useRouter } from 'expo-router';
 import { useLanguage } from '../utils/LanguageContext';
 
 const { width } = Dimensions.get('window');
+
+// Check if running on web (QR code access) vs native app
+const isWebPlatform = Platform.OS === 'web';
 
 // Hotel Logo Component
 const HotelLogo = ({ size = 80 }: { size?: number }) => (
