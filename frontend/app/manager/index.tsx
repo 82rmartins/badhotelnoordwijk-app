@@ -31,8 +31,14 @@ function buildDashboardFromMews(mewsData: MewsReportStore, settings: HotelSettin
   today.setHours(0, 0, 0, 0);
   const todayStr = today.toISOString().split('T')[0];
   
-  // ALWAYS use 24 rooms
-  const TOTAL_ROOMS = 24;
+  // Get total rooms from the daily data (read from file) or use settings
+  // The availableRooms in daily data is calculated as: Accommodatie + None - OutOfOrder
+  let TOTAL_ROOMS = settings.total_rooms;
+  if (mewsData.daily.length > 0 && mewsData.daily[0].availableRooms > 0) {
+    // Use the rooms count from the first daily record
+    TOTAL_ROOMS = mewsData.daily[0].availableRooms;
+    console.log('Using total rooms from file:', TOTAL_ROOMS);
+  }
   
   // Combine ALL data sources for lookup
   const allData = [...mewsData.daily, ...mewsData.weekly, ...mewsData.monthly];
