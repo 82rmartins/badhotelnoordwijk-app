@@ -777,12 +777,15 @@ export default function Dashboard() {
           const arrivals = mewsData.arrivals?.find(a => a.date === dateStr)?.count || mewsDay?.arrivals || 0;
           const departures = mewsData.departures?.find(dp => dp.date === dateStr)?.count || mewsDay?.departures || 0;
           
+          // Get total rooms from the day's data or use the global TOTAL_ROOMS
+          const dayTotalRooms = mewsDay?.availableRooms || TOTAL_ROOMS;
+          
           // Use data if found, otherwise use averages
           dayStats.push({
             date: d,
             occupancy_percent: mewsDay?.occupancy || avgOcc,
-            rooms_occupied: mewsDay?.occupiedRooms || Math.round((avgOcc / 100) * loadedSettings.total_rooms),
-            total_rooms: 24, // Always 24 rooms
+            rooms_occupied: mewsDay?.occupiedRooms || Math.round((avgOcc / 100) * dayTotalRooms),
+            total_rooms: dayTotalRooms,
             arrivals: arrivals,
             departures: departures,
             room_revenue: mewsDay?.revenue || avgRev,
@@ -791,7 +794,7 @@ export default function Dashboard() {
             city_tax: 0,
             adr: mewsDay?.adr || avgAdr,
           });
-          console.log(`Day ${dateStr}: ${arrivals} arrivals, ${departures} departures, ${mewsDay?.occupiedRooms || 0} rooms`);
+          console.log(`Day ${dateStr}: ${arrivals} arrivals, ${departures} departures, ${mewsDay?.occupiedRooms || 0} rooms / ${dayTotalRooms} total`);
         }
         setDayStatsArray(dayStats);
         console.log('dayStatsArray set with', dayStats.length, 'items');
