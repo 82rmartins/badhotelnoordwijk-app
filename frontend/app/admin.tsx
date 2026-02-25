@@ -497,25 +497,6 @@ export default function AdminScreen() {
           </View>
         </View>
 
-        {/* Demo Data Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t.demoData}</Text>
-          <Text style={styles.sectionSubtitle}>{t.generateTestData}</Text>
-
-          <TouchableOpacity
-            style={[styles.demoButton, seedingData && styles.uploadButtonDisabled]}
-            onPress={seedDemoData}
-            disabled={seedingData}
-          >
-            {seedingData ? <ActivityIndicator color="#111113" /> : <Ionicons name="flask" size={24} color="#111113" />}
-            <Text style={styles.demoButtonText}>{seedingData ? t.generating : t.createDemoData}</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.warningText}>
-            <Ionicons name="warning" size={12} color="#F59E0B" /> {t.warning}: {t.replaceWarning}
-          </Text>
-        </View>
-
         {/* Last Result */}
         {lastResult && (
           <View style={[styles.resultBox, lastResult.startsWith('✓') ? styles.resultSuccess : styles.resultError]}>
