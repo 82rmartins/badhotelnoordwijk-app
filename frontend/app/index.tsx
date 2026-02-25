@@ -165,14 +165,17 @@ export default function ModeSelector() {
           highlight={t.guestHighlight}
         />
         
-        <ModeCard 
-          icon="analytics"
-          title={t.managerMode}
-          description={t.managerDesc}
-          onPress={() => router.push('/manager')}
-          color="#60A5FA"
-          highlight={t.managerHighlight}
-        />
+        {/* Manager Mode - Only show on native app, NOT on web (QR code) */}
+        {!isWebPlatform && (
+          <ModeCard 
+            icon="analytics"
+            title={t.managerMode}
+            description={t.managerDesc}
+            onPress={() => router.push('/manager')}
+            color="#60A5FA"
+            highlight={t.managerHighlight}
+          />
+        )}
       </View>
 
       {/* Footer */}
