@@ -713,7 +713,10 @@ class MewsDailyData(BaseModel):
     occupancy: float
     occupiedRooms: int
     availableRooms: int
-    revenue: float
+    revenue: float  # Room revenue only
+    totalRevenue: float = 0  # Total (rooms + parking + tax)
+    parkingRevenue: float = 0
+    touristTax: float = 0
     adr: float
     arrivals: int = 0
     departures: int = 0
