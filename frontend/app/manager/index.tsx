@@ -536,6 +536,7 @@ const MonthlyChart = ({ monthData }: { monthData: any }) => {
 const WeekStatsCard = ({ weekOffset, mewsData, settings }: { weekOffset: number; mewsData: MewsReportStore; settings: any }) => {
   const { t, language } = useLanguage();
   const today = new Date();
+  today.setHours(12, 0, 0, 0);
   const weekStart = new Date(today);
   weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7) + (weekOffset * 7));
   const weekEnd = new Date(weekStart);
@@ -557,7 +558,7 @@ const WeekStatsCard = ({ weekOffset, mewsData, settings }: { weekOffset: number;
   for (let i = 0; i < 7; i++) {
     const d = new Date(weekStart);
     d.setDate(weekStart.getDate() + i);
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = formatLocalDate(d);
     const dayData = mewsData.daily.find(m => m.date === dateStr);
     
     if (dayData) {
