@@ -1028,17 +1028,21 @@ export default function Dashboard() {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#10B981" />}>
         
-        {/* OPERATION - Swipeable Days */}
+        {/* OPERATION - Today Only */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="calendar" size={20} color="#10B981" />
             <Text style={styles.sectionTitle}>{t.operation.toUpperCase()}</Text>
-            <Text style={styles.swipeHint}>← {language === 'en' ? 'swipe' : 'veeg'} →</Text>
           </View>
-          <ScrollView ref={dayScrollRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={handleScroll(setCurrentDayIndex)} snapToInterval={CARD_WIDTH} decelerationRate="fast" contentContainerStyle={{ paddingHorizontal: 16 }}>
-            {dayStatsArray.map((stats, i) => <DayCard key={i} dayStats={stats} dayLabel={dayLabels[i]} isToday={i === 2} />)}
-          </ScrollView>
-          <PaginationDots total={5} current={currentDayIndex} />
+          <View style={{ paddingHorizontal: 16 }}>
+            {dayStatsArray.length > 0 && dayStatsArray[2] ? (
+              <DayCard dayStats={dayStatsArray[2]} dayLabel={dayLabels[2]} isToday={true} />
+            ) : (
+              <View style={[styles.dayCard, { width: CARD_WIDTH }]}>
+                <ActivityIndicator color="#10B981" style={{ marginTop: 60 }} />
+              </View>
+            )}
+          </View>
         </View>
 
         {/* RADAR */}
