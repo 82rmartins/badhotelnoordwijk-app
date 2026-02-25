@@ -218,6 +218,7 @@ export default function YourStay() {
           color="#10B981"
           items={[
             { icon: 'wifi', text: t.wifiNetwork, subtext: t.wifiInstructions },
+            { icon: 'tv', text: t.tv, subtext: `${t.tvPassword} - ${t.tvInfo}` },
             { icon: 'time', text: t.checkIn },
             { icon: 'time-outline', text: t.checkOut },
             { icon: 'cafe', text: t.freeAmenities, subtext: t.coffeeDesc },
