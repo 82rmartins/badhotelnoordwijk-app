@@ -80,7 +80,7 @@ export default function AdminScreen() {
     await clearAllData();
     
     // Collect all data by type
-    const dailyData: MewsDailyData[] = [];
+    let dailyData: MewsDailyData[] = [];
     const weeklyData: MewsDailyData[] = [];
     const monthlyData: MewsDailyData[] = [];
     let arrivalsData: { date: string; count: number }[] = [];
@@ -90,6 +90,17 @@ export default function AdminScreen() {
       try {
         const parseResult = parseXLSX(content, settings.total_rooms);
         const { data, reportType, errors } = parseResult;
+
+        console.log(`Parsing ${fileName}: type=${reportType}, records=${data.length}`);
+
+        // Handle Bad Hotel combined format (has everything in one file)
+        if (reportType === 'badhotel') {
+          dailyData = data;
+          arrivalsData = parseResult.arrivalsData || [];
+          departuresData = parseResult.departuresData || [];
+          results.push(`✓ ${fileName} (Bad Hotel): ${data.length} days, ${arrivalsData.length} arrivals, ${departuresData.length} departures`);
+          continue;
+        }
 
         // Handle Arrivals and Departures reports
         if (reportType === 'arrivals') {
@@ -130,12 +141,16 @@ export default function AdminScreen() {
       }
     }
 
-    // Merge arrivals/departures into daily data
+    // Merge arrivals/departures into daily data (if not already merged from badhotel format)
     for (const d of dailyData) {
-      const arrivalEntry = arrivalsData.find(a => a.date === d.date);
-      const departureEntry = departuresData.find(dp => dp.date === d.date);
-      if (arrivalEntry) d.arrivals = arrivalEntry.count;
-      if (departureEntry) d.departures = departureEntry.count;
+      if (!d.arrivals) {
+        const arrivalEntry = arrivalsData.find(a => a.date === d.date);
+        if (arrivalEntry) d.arrivals = arrivalEntry.count;
+      }
+      if (!d.departures) {
+        const departureEntry = departuresData.find(dp => dp.date === d.date);
+        if (departureEntry) d.departures = departureEntry.count;
+      }
     }
 
     // Save all collected data (REPLACES existing)
