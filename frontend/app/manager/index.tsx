@@ -503,20 +503,46 @@ const WeeklyChart = ({ weekData }: { weekData: any[] }) => {
 };
 
 // Monthly Chart
-const MonthlyChart = ({ monthData }: { monthData: any }) => {
+const MonthlyChart = ({ monthData, mewsData }: { monthData: any; mewsData?: any }) => {
   const { t, language } = useLanguage();
   const fullMonths = getFullMonthNames(language);
   const barColor = (v: number) => v >= 70 ? '#10B981' : v >= 50 ? '#F59E0B' : '#EF4444';
+  
+  // Calculate weekly occupancy from daily data for current month
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const currentMonth = today.getMonth();
+  const currentYear = today.getFullYear();
+  
+  // Get all days in current month from mewsData
+  const monthDays = mewsData?.daily?.filter((d: any) => {
+    const date = new Date(d.date);
+    return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+  }) || [];
+  
+  // Group by week of month
+  const weeklyOcc: number[] = [0, 0, 0, 0, 0];
+  const weeklyCount: number[] = [0, 0, 0, 0, 0];
+  
+  monthDays.forEach((d: any) => {
+    const date = new Date(d.date);
+    const weekOfMonth = Math.floor((date.getDate() - 1) / 7);
+    if (weekOfMonth < 5) {
+      weeklyOcc[weekOfMonth] += d.occupancy || 0;
+      weeklyCount[weekOfMonth]++;
+    }
+  });
+  
   const weeks = [
-    { label: 'W1', value: 45 + Math.random() * 30 },
-    { label: 'W2', value: 50 + Math.random() * 30 },
-    { label: 'W3', value: 40 + Math.random() * 35 },
-    { label: 'W4', value: monthData?.occupancy_accumulated || 50 },
+    { label: 'W1', value: weeklyCount[0] > 0 ? weeklyOcc[0] / weeklyCount[0] : 0 },
+    { label: 'W2', value: weeklyCount[1] > 0 ? weeklyOcc[1] / weeklyCount[1] : 0 },
+    { label: 'W3', value: weeklyCount[2] > 0 ? weeklyOcc[2] / weeklyCount[2] : 0 },
+    { label: 'W4', value: weeklyCount[3] > 0 ? weeklyOcc[3] / weeklyCount[3] : monthData?.occupancy_accumulated || 0 },
   ];
 
   return (
     <View style={styles.chartCard}>
-      <Text style={styles.chartCardTitle}>{fullMonths[new Date().getMonth()]} {t.occupancy}</Text>
+      <Text style={styles.chartCardTitle}>{fullMonths[currentMonth]} {t.occupancy}</Text>
       <View style={styles.chartBarsRow}>
         {weeks.map((w, i) => (
           <View key={i} style={[styles.chartBarWrapper, { flex: 1 }]}>
