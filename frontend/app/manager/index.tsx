@@ -706,13 +706,24 @@ export default function Dashboard() {
   const weekScrollRef = useRef<ScrollView>(null);
   const monthScrollRef = useRef<ScrollView>(null);
 
-  const dayLabels = [
-    language === 'en' ? '2 days ago' : '2 dagen geleden',
-    language === 'en' ? 'Yesterday' : 'Gisteren',
-    language === 'en' ? 'Today' : 'Vandaag',
-    language === 'en' ? 'Tomorrow' : 'Morgen',
-    language === 'en' ? 'In 2 days' : 'Over 2 dagen',
-  ];
+  // Generate day labels with actual dates
+  const generateDayLabels = () => {
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const labels: string[] = [];
+    
+    for (let i = -2; i <= 2; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      labels.push(`${day}/${month}/${year}`);
+    }
+    return labels;
+  };
+  
+  const dayLabels = generateDayLabels();
 
   // Week offsets: -2, -1, 0, 1, 2
   const weekOffsets = [-2, -1, 0, 1, 2];
