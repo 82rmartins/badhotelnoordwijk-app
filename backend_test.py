@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any
 
 # Get backend URL from environment
-BACKEND_URL = "https://hotelier-control.preview.emergentagent.com/api"
+BACKEND_URL = "https://bad-hotel-dashboard.preview.emergentagent.com/api"
 
 class HotelAPITester:
     def __init__(self):
