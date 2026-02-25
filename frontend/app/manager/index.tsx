@@ -131,7 +131,7 @@ function buildDashboardFromMews(mewsData: MewsReportStore, settings: HotelSettin
   for (let i = 0; i < 14; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = formatLocalDate(d);
     
     // Try to find matching data in daily data first
     let dayData = mewsData.daily.find(m => m.date === dateStr);
