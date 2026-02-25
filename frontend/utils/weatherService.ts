@@ -44,26 +44,27 @@ function getSimulatedWeather(): WeatherData {
   const month = new Date().getMonth();
   const hour = new Date().getHours();
   
-  // Seasonal temperatures for Netherlands
+  // Updated seasonal temperatures for Noordwijk, Netherlands (coastal climate - milder)
+  // Based on actual average temperatures
   const seasonalTemp: Record<number, { min: number; max: number }> = {
-    0: { min: 1, max: 6 },   // Jan
-    1: { min: 1, max: 7 },   // Feb
-    2: { min: 3, max: 10 },  // Mar
-    3: { min: 5, max: 13 },  // Apr
-    4: { min: 9, max: 17 },  // May
-    5: { min: 12, max: 20 }, // Jun
-    6: { min: 14, max: 22 }, // Jul
-    7: { min: 14, max: 22 }, // Aug
-    8: { min: 11, max: 19 }, // Sep
-    9: { min: 8, max: 14 },  // Oct
-    10: { min: 4, max: 9 },  // Nov
-    11: { min: 2, max: 6 },  // Dec
+    0: { min: 2, max: 8 },    // Jan - Winter
+    1: { min: 3, max: 10 },   // Feb - Late winter (can be mild)
+    2: { min: 5, max: 12 },   // Mar - Early spring
+    3: { min: 7, max: 15 },   // Apr - Spring
+    4: { min: 10, max: 18 },  // May - Late spring
+    5: { min: 13, max: 21 },  // Jun - Early summer
+    6: { min: 15, max: 23 },  // Jul - Summer
+    7: { min: 15, max: 23 },  // Aug - Summer
+    8: { min: 13, max: 20 },  // Sep - Early autumn
+    9: { min: 9, max: 16 },   // Oct - Autumn
+    10: { min: 5, max: 11 },  // Nov - Late autumn
+    11: { min: 3, max: 8 },   // Dec - Winter
   };
 
   const { min, max } = seasonalTemp[month];
-  // Temperature varies throughout the day
+  // Temperature varies throughout the day - warmer in afternoon
   const dayProgress = Math.sin((hour - 6) * Math.PI / 12);
-  const temp = Math.round(min + (max - min) * Math.max(0, dayProgress));
+  const temp = Math.round(min + (max - min) * Math.max(0.3, dayProgress));
 
   const conditions = [
     { desc: 'Clear sky', icon: 'sunny' },
@@ -72,7 +73,7 @@ function getSimulatedWeather(): WeatherData {
     { desc: 'Light rain', icon: 'rainy' },
   ];
   
-  // More likely to be sunny in summer
+  // More likely to be sunny in summer, more clouds in winter
   const conditionIndex = month >= 5 && month <= 8 
     ? Math.floor(Math.random() * 2) 
     : Math.floor(Math.random() * conditions.length);
@@ -83,9 +84,9 @@ function getSimulatedWeather(): WeatherData {
     temp,
     description: condition.desc,
     icon: condition.icon,
-    feels_like: temp - Math.floor(Math.random() * 3),
-    humidity: 60 + Math.floor(Math.random() * 30),
-    wind_speed: 10 + Math.floor(Math.random() * 20),
+    feels_like: temp - Math.floor(Math.random() * 2),
+    humidity: 65 + Math.floor(Math.random() * 25),
+    wind_speed: 15 + Math.floor(Math.random() * 15), // Coastal = more wind
   };
 }
 
