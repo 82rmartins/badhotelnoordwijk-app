@@ -13,7 +13,7 @@ export interface ParsedXLSXResult {
 }
 
 // Parse Mews Manager Report XLSX
-export function parseXLSX(content: string | ArrayBuffer, totalRooms: number = 24): ParsedXLSXResult {
+export function parseXLSX(content: string | ArrayBuffer, totalRooms: number = 26): ParsedXLSXResult {
   const errors: string[] = [];
   const data: MewsDailyData[] = [];
   let reportType: 'daily' | 'weekly' | 'monthly' | 'arrivals' | 'departures' | 'unknown' = 'unknown';
@@ -37,76 +37,8 @@ export function parseXLSX(content: string | ArrayBuffer, totalRooms: number = 24
     console.log('Workbook sheets:', workbook.SheetNames);
 
     // Check if this is a Reservation Report (Arrivals/Departures)
-    if (workbook.SheetNames.includes('Age categories') || workbook.SheetNames.includes('Reservations')) {
-      // This is an Arrivals or Departures report
-      const paramsSheet = workbook.Sheets['Parameters'];
-      const paramsData = XLSX.utils.sheet_to_json(paramsSheet, { header: 1 }) as any[][];
-      
-      // Detect if arrivals or departures
-      let isArrivals = false;
-      let isDepartures = false;
-      
-      for (const row of paramsData) {
-        const key = String(row[0] || '').toLowerCase();
-        const value = String(row[1] || '').toLowerCase();
-        if (key === 'mode' || key.includes('filter')) {
-          if (value.includes('arrival')) isArrivals = true;
-          if (value.includes('departure')) isDepartures = true;
-        }
-      }
-      
-      // Check filename hint from first param row
-      const firstRow = String(paramsData[0]?.[0] || '').toLowerCase();
-      if (firstRow.includes('arriv')) isArrivals = true;
-      if (firstRow.includes('depart')) isDepartures = true;
-      
-      reportType = isArrivals ? 'arrivals' : isDepartures ? 'departures' : 'arrivals';
-      
-      // Parse Age categories sheet for arrival/departure dates
-      if (workbook.SheetNames.includes('Age categories')) {
-        const ageSheet = workbook.Sheets['Age categories'];
-        const ageData = XLSX.utils.sheet_to_json(ageSheet) as any[];
-        
-        const countsByDate: Record<string, number> = {};
-        
-        for (const row of ageData) {
-          let dateValue;
-          if (reportType === 'arrivals') {
-            dateValue = row['Arrival'];
-          } else {
-            dateValue = row['Departure'];
-          }
-          
-          if (dateValue) {
-            let dateStr: string;
-            if (dateValue instanceof Date) {
-              dateStr = dateValue.toISOString().split('T')[0];
-            } else {
-              const parsed = new Date(dateValue);
-              dateStr = !isNaN(parsed.getTime()) ? parsed.toISOString().split('T')[0] : '';
-            }
-            
-            if (dateStr) {
-              countsByDate[dateStr] = (countsByDate[dateStr] || 0) + 1;
-            }
-          }
-        }
-        
-        // Convert to array
-        const resultData = Object.entries(countsByDate)
-          .map(([date, count]) => ({ date, count }))
-          .sort((a, b) => a.date.localeCompare(b.date));
-        
-        if (reportType === 'arrivals') {
-          arrivalsData = resultData;
-          console.log('Parsed arrivals:', arrivalsData.length, 'days');
-        } else {
-          departuresData = resultData;
-          console.log('Parsed departures:', departuresData.length, 'days');
-        }
-      }
-      
-      return { data, reportType, arrivalsData, departuresData, errors };
+    if (workbook.SheetNames.includes('Reservations')) {
+      return parseReservationReport(workbook, errors);
     }
 
     // Check for Manager Report structure (should have Parameters and Data sheets)
@@ -132,94 +64,143 @@ export function parseXLSX(content: string | ArrayBuffer, totalRooms: number = 24
       }
     }
 
-    // Read Data sheet
+    // Read Data sheet as raw 2D array
     const dataSheet = workbook.Sheets['Data'];
     const jsonData = XLSX.utils.sheet_to_json(dataSheet, { header: 1 }) as any[][];
 
-    console.log('Data rows:', jsonData.length);
+    console.log('Data rows:', jsonData.length, 'Report type:', reportType);
 
     if (jsonData.length < 2) {
       errors.push('No data rows found in report');
       return { data, reportType, errors };
     }
 
-    // First row has periods (columns 3+)
+    // First row has periods/dates starting from column 4 (index 3)
     const headerRow = jsonData[0];
     const periods: string[] = [];
     for (let i = 3; i < headerRow.length; i++) {
-      if (headerRow[i] && headerRow[i] !== 'Total') {
-        periods.push(String(headerRow[i]));
+      const val = headerRow[i];
+      if (val && val !== 'Total') {
+        periods.push(String(val));
       }
     }
-    console.log('Periods found:', periods.length, periods.slice(0, 3));
+    console.log('Periods found:', periods.length, 'First 3:', periods.slice(0, 3));
 
-    // Find key rows by metric name
-    let occupancyRow: any[] | null = null;
-    let occupiedRow: any[] | null = null;
-    let availableRow: any[] | null = null;
-    let revenueRow: any[] | null = null;
-    let adrRow: any[] | null = null;
-    let customersRow: any[] | null = null;
+    // Find key data rows by structure:
+    // Col A (0) = Group (Accommodatie, None, etc)
+    // Col B (1) = Type (Room, etc)
+    // Col C (2) = Metric (Occupancy, Occupied, Available, Revenue, etc)
+    // Col D+ (3+) = Values per period
+
+    // Find the rows we need
+    let accomOccupancyRow: any[] | null = null;
+    let accomOccupiedRow: any[] | null = null;
+    let accomAvailableRow: any[] | null = null;
+    let accomRevenueRow: any[] | null = null;
+    let accomAdrRow: any[] | null = null;
+    let accomCustomersRow: any[] | null = null;
+    let noneAvailableRow: any[] | null = null;
+    let noneOutOfOrderRow: any[] | null = null;
 
     for (const row of jsonData) {
-      const metric = String(row[2] || '').toLowerCase();
       const group = String(row[0] || '').toLowerCase();
+      const type = String(row[1] || '').toLowerCase();
+      const metric = String(row[2] || '').toLowerCase();
       
-      // Look for room/accommodation metrics (Stay services)
-      if (group.includes('stay') || group.includes('accom') || group.includes('room')) {
-        if (metric.includes('occupancy') && !metric.includes('direct')) {
-          occupancyRow = row;
-          console.log('Found occupancy row');
-        } else if (metric === 'occupied' || metric.includes('directly occupied')) {
-          occupiedRow = row;
-          console.log('Found occupied row');
-        } else if (metric === 'available') {
-          availableRow = row;
-          console.log('Found available row');
-        } else if ((metric.includes('revenue') && metric.includes('night')) && !metric.includes('per') && !metric.includes('direct')) {
-          revenueRow = row;
-          console.log('Found revenue row');
-        } else if (metric.includes('average rate') || metric.includes('adr')) {
-          adrRow = row;
-          console.log('Found ADR row');
-        } else if (metric === 'customers') {
-          customersRow = row;
-          console.log('Found customers row');
+      // Accommodatie metrics (actual guest rooms)
+      if (group.includes('accommodat') || group.includes('stay')) {
+        if (type.includes('room')) {
+          if (metric === 'occupancy') {
+            accomOccupancyRow = row;
+          } else if (metric === 'occupied') {
+            accomOccupiedRow = row;
+          } else if (metric === 'available') {
+            accomAvailableRow = row;
+          } else if (metric === 'revenue' || metric === 'revenue (nights)') {
+            accomRevenueRow = row;
+          } else if (metric.includes('average rate') || metric === 'average rate (nightly)') {
+            accomAdrRow = row;
+          } else if (metric === 'customers') {
+            accomCustomersRow = row;
+          }
+        }
+      }
+      
+      // None category (additional/blocked rooms)
+      if (group === 'none') {
+        if (type.includes('room')) {
+          if (metric === 'available') {
+            noneAvailableRow = row;
+          } else if (metric.includes('out of order')) {
+            noneOutOfOrderRow = row;
+          }
         }
       }
     }
+
+    console.log('Found rows:', {
+      accomOccupancy: !!accomOccupancyRow,
+      accomOccupied: !!accomOccupiedRow,
+      accomAvailable: !!accomAvailableRow,
+      accomRevenue: !!accomRevenueRow,
+      accomAdr: !!accomAdrRow,
+      noneAvailable: !!noneAvailableRow,
+      noneOutOfOrder: !!noneOutOfOrderRow,
+    });
+
+    // Helper to parse numeric value
+    const parseNum = (row: any[] | null, idx: number): number => {
+      if (!row || idx >= row.length) return 0;
+      const val = row[idx];
+      if (typeof val === 'number') return val;
+      if (typeof val === 'string') {
+        return parseFloat(val.replace(/[^0-9.,\-]/g, '').replace(',', '.')) || 0;
+      }
+      return 0;
+    };
 
     // Extract data for each period
     for (let i = 0; i < periods.length; i++) {
-      const colIndex = i + 3; // Data starts at column 3
+      const colIndex = i + 3; // Data starts at column index 3
 
-      const parseNum = (row: any[] | null, idx: number): number => {
-        if (!row || idx >= row.length) return 0;
-        const val = row[idx];
-        if (typeof val === 'number') return val;
-        if (typeof val === 'string') {
-          return parseFloat(val.replace(/[^0-9.,\-]/g, '').replace(',', '.')) || 0;
-        }
-        return 0;
-      };
+      // Get values from file
+      let occupancyFromFile = parseNum(accomOccupancyRow, colIndex);
+      const occupiedRooms = parseNum(accomOccupiedRow, colIndex);
+      const accomAvailable = parseNum(accomAvailableRow, colIndex);
+      const noneAvailable = parseNum(noneAvailableRow, colIndex);
+      const outOfOrder = parseNum(noneOutOfOrderRow, colIndex);
+      const revenue = parseNum(accomRevenueRow, colIndex);
+      const adr = parseNum(accomAdrRow, colIndex);
+      const customers = parseNum(accomCustomersRow, colIndex);
 
-      let occupancy = parseNum(occupancyRow, colIndex);
-      const occupied = parseNum(occupiedRow, colIndex);
-      const availableFromFile = parseNum(availableRow, colIndex);
-      const revenue = parseNum(revenueRow, colIndex);
-      const adr = parseNum(adrRow, colIndex);
-      const customers = parseNum(customersRow, colIndex);
+      // Calculate ACTUAL total rooms from the file
+      // Total rooms = Accommodatie Available + None Available - Out of Order
+      const actualTotalRooms = accomAvailable + noneAvailable - outOfOrder;
 
       // Convert occupancy if it's a decimal (0.63 -> 63%)
+      let occupancy = occupancyFromFile;
       if (occupancy > 0 && occupancy <= 1) {
         occupancy = occupancy * 100;
       }
 
-      // For WEEKLY reports, the "occupied" and "available" are totals for 7 days
-      // So we need to calculate daily average
-      let dailyOccupied = occupied;
-      if (reportType === 'weekly' && occupied > totalRooms) {
-        dailyOccupied = occupied / 7; // Average per day
+      // For WEEKLY reports, occupied/available are totals for 7 days
+      let dailyOccupied = occupiedRooms;
+      let dailyTotalRooms = actualTotalRooms;
+      
+      if (reportType === 'weekly') {
+        dailyOccupied = occupiedRooms / 7; // Average per day
+        dailyTotalRooms = actualTotalRooms / 7; // Average per day
+      }
+      
+      // For MONTHLY reports, calculate from available
+      if (reportType === 'monthly') {
+        // Monthly available is total room-nights in the month
+        // We need to figure out days in month from the period
+        const periodDate = parsePeriodToDate(periods[i], reportType);
+        const d = new Date(periodDate);
+        const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+        dailyTotalRooms = accomAvailable / daysInMonth;
+        dailyOccupied = occupiedRooms / daysInMonth;
       }
 
       // Skip if no meaningful data
@@ -228,31 +209,20 @@ export function parseXLSX(content: string | ArrayBuffer, totalRooms: number = 24
       // Parse period to date
       const periodDate = parsePeriodToDate(periods[i], reportType);
 
-      // ALWAYS use totalRooms (24) instead of file value
-      const roomsToUse = totalRooms;
-      
-      // Calculate occupancy based on 24 rooms per day
-      // Use the occupancy from file if it's reasonable, otherwise recalculate
-      let adjustedOccupancy = occupancy;
-      
-      // If occupancy is over 100%, it's wrong - recalculate from occupied rooms
-      if (occupancy > 100 || occupancy === 0) {
-        adjustedOccupancy = (dailyOccupied / roomsToUse) * 100;
-      }
-      
-      // For weekly data with many rooms, recalculate to be safe
-      if (reportType === 'weekly' && dailyOccupied > 0) {
-        adjustedOccupancy = (dailyOccupied / roomsToUse) * 100;
+      // Recalculate occupancy using actual room count
+      let finalOccupancy = occupancy;
+      if (dailyTotalRooms > 0) {
+        finalOccupancy = (dailyOccupied / dailyTotalRooms) * 100;
       }
 
       // Cap at 100%
-      if (adjustedOccupancy > 100) adjustedOccupancy = 100;
+      if (finalOccupancy > 100) finalOccupancy = 100;
 
       data.push({
         date: periodDate,
-        occupancy: Math.round(adjustedOccupancy * 10) / 10,
+        occupancy: Math.round(finalOccupancy * 10) / 10,
         occupiedRooms: Math.round(dailyOccupied),
-        availableRooms: roomsToUse, // Always 24
+        availableRooms: Math.round(dailyTotalRooms),
         revenue: Math.round(revenue * 100) / 100,
         adr: Math.round(adr * 100) / 100,
         arrivals: 0, // Will be filled from arrivals report
@@ -262,6 +232,10 @@ export function parseXLSX(content: string | ArrayBuffer, totalRooms: number = 24
     }
 
     console.log('Parsed data records:', data.length);
+    if (data.length > 0) {
+      console.log('First record:', data[0]);
+      console.log('Last record:', data[data.length - 1]);
+    }
 
     if (data.length === 0) {
       errors.push('No valid data found in report');
@@ -273,6 +247,166 @@ export function parseXLSX(content: string | ArrayBuffer, totalRooms: number = 24
   }
 
   return { data, reportType, arrivalsData, departuresData, errors };
+}
+
+// Parse Reservation report for arrivals/departures counts
+function parseReservationReport(workbook: XLSX.WorkBook, errors: string[]): ParsedXLSXResult {
+  const data: MewsDailyData[] = [];
+  let reportType: 'arrivals' | 'departures' = 'arrivals';
+  let arrivalsData: { date: string; count: number }[] = [];
+  let departuresData: { date: string; count: number }[] = [];
+
+  try {
+    // Check Parameters sheet to determine if arrivals or departures
+    const paramsSheet = workbook.Sheets['Parameters'];
+    if (paramsSheet) {
+      const paramsData = XLSX.utils.sheet_to_json(paramsSheet, { header: 1 }) as any[][];
+      
+      for (const row of paramsData) {
+        const key = String(row[0] || '').toLowerCase();
+        const value = String(row[1] || '').toLowerCase();
+        
+        // Check Filter field
+        if (key === 'filter') {
+          if (value.includes('departure')) {
+            reportType = 'departures';
+          } else if (value.includes('arrival')) {
+            reportType = 'arrivals';
+          }
+        }
+        
+        // Also check title row
+        if (key.includes('reservation report')) {
+          if (key.includes('depart') || value.includes('depart')) {
+            reportType = 'departures';
+          }
+        }
+      }
+    }
+
+    console.log('Reservation report type detected:', reportType);
+
+    // Parse Reservations sheet to count arrivals/departures per date
+    const reservationsSheet = workbook.Sheets['Reservations'];
+    if (!reservationsSheet) {
+      errors.push('No Reservations sheet found');
+      return { data, reportType, arrivalsData, departuresData, errors };
+    }
+
+    const reservations = XLSX.utils.sheet_to_json(reservationsSheet, { header: 1 }) as any[][];
+    
+    if (reservations.length < 2) {
+      errors.push('No reservations data found');
+      return { data, reportType, arrivalsData, departuresData, errors };
+    }
+
+    // Find column indices from header row
+    const headers = reservations[0];
+    let arrivalCol = -1;
+    let departureCol = -1;
+    let statusCol = -1;
+    
+    for (let i = 0; i < headers.length; i++) {
+      const h = String(headers[i] || '').toLowerCase();
+      if (h === 'arrival') arrivalCol = i;
+      if (h === 'departure') departureCol = i;
+      if (h === 'status') statusCol = i;
+    }
+
+    console.log('Column indices:', { arrivalCol, departureCol, statusCol });
+
+    // Count by date
+    const arrivalCounts: Record<string, number> = {};
+    const departureCounts: Record<string, number> = {};
+
+    for (let rowIdx = 1; rowIdx < reservations.length; rowIdx++) {
+      const row = reservations[rowIdx];
+      
+      // Skip cancelled reservations
+      if (statusCol >= 0) {
+        const status = String(row[statusCol] || '').toLowerCase();
+        if (status.includes('cancel')) continue;
+      }
+
+      // Count arrivals
+      if (arrivalCol >= 0 && row[arrivalCol]) {
+        const dateStr = parseReservationDate(row[arrivalCol]);
+        if (dateStr) {
+          arrivalCounts[dateStr] = (arrivalCounts[dateStr] || 0) + 1;
+        }
+      }
+
+      // Count departures
+      if (departureCol >= 0 && row[departureCol]) {
+        const dateStr = parseReservationDate(row[departureCol]);
+        if (dateStr) {
+          departureCounts[dateStr] = (departureCounts[dateStr] || 0) + 1;
+        }
+      }
+    }
+
+    // Convert to arrays
+    arrivalsData = Object.entries(arrivalCounts)
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    
+    departuresData = Object.entries(departureCounts)
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    console.log('Parsed arrivals:', arrivalsData.length, 'days');
+    console.log('Parsed departures:', departuresData.length, 'days');
+    
+    // Log some samples
+    const today = new Date().toISOString().split('T')[0];
+    const todayArrivals = arrivalsData.find(a => a.date === today);
+    const todayDepartures = departuresData.find(d => d.date === today);
+    console.log('Today arrivals:', todayArrivals);
+    console.log('Today departures:', todayDepartures);
+
+  } catch (error: any) {
+    console.error('Reservation parse error:', error);
+    errors.push(`Parse error: ${error.message}`);
+  }
+
+  return { data, reportType, arrivalsData, departuresData, errors };
+}
+
+// Parse reservation date value to ISO string
+function parseReservationDate(dateValue: any): string | null {
+  if (!dateValue) return null;
+  
+  // If it's a Date object
+  if (dateValue instanceof Date) {
+    return dateValue.toISOString().split('T')[0];
+  }
+  
+  // If it's a string with datetime like "2026-02-25 14:00:00.000000"
+  const str = String(dateValue);
+  
+  // Try ISO format first
+  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+  
+  // Try DD-MM-YYYY format
+  const ddmmMatch = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+  if (ddmmMatch) {
+    const day = ddmmMatch[1].padStart(2, '0');
+    const month = ddmmMatch[2].padStart(2, '0');
+    return `${ddmmMatch[3]}-${month}-${day}`;
+  }
+  
+  // Try to parse as Date
+  try {
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toISOString().split('T')[0];
+    }
+  } catch {}
+  
+  return null;
 }
 
 // Parse period string to ISO date
