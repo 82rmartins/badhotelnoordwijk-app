@@ -137,9 +137,15 @@ function buildDashboardFromMews(mewsData: MewsReportStore, settings: HotelSettin
       if (weekDataForDay) dayData = weekDataForDay;
     }
     
-    // Calculate occupancy with 24 rooms
-    let occupiedRooms = dayData?.occupiedRooms || 0;
-    let occ = occupiedRooms > 0 ? (occupiedRooms / TOTAL_ROOMS) * 100 : avgOcc;
+    // Get rooms for this day
+    const dayTotalRooms = dayData?.availableRooms || TOTAL_ROOMS;
+    const occupiedRooms = dayData?.occupiedRooms || 0;
+    
+    // Use the occupancy from the file if available, otherwise calculate
+    let occ = dayData?.occupancy || 0;
+    if (occ === 0 && occupiedRooms > 0 && dayTotalRooms > 0) {
+      occ = (occupiedRooms / dayTotalRooms) * 100;
+    }
     
     radar.push({
       date: d,
@@ -148,7 +154,7 @@ function buildDashboardFromMews(mewsData: MewsReportStore, settings: HotelSettin
       month: monthNames[d.getMonth()],
       occupancy_percent: Math.round(occ * 10) / 10,
       rooms_sold: occupiedRooms,
-      total_rooms: TOTAL_ROOMS,
+      total_rooms: dayTotalRooms,
       adr: dayData?.adr || avgAdr,
       target: target,
       urgency: occ < target * 0.7 ? 'high' : occ < target * 0.9 ? 'medium' : 'low',
