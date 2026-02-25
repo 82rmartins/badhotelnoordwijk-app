@@ -707,10 +707,6 @@ export default function Dashboard() {
   const loadDashboard = useCallback(async () => {
     try {
       const loadedSettings = await loadSettings();
-      if (loadedSettings.total_rooms !== 24) {
-        loadedSettings.total_rooms = 24;
-        await saveSettings(loadedSettings);
-      }
       setSettingsState(loadedSettings);
       
       // Load Mews data instead of old reservations
@@ -722,6 +718,13 @@ export default function Dashboard() {
         weekly: mewsData.weekly.length, 
         monthly: mewsData.monthly.length 
       });
+      
+      // Determine TOTAL_ROOMS from the data file
+      let TOTAL_ROOMS = loadedSettings.total_rooms;
+      if (mewsData.daily.length > 0 && mewsData.daily[0].availableRooms > 0) {
+        TOTAL_ROOMS = mewsData.daily[0].availableRooms;
+        console.log('Using total rooms from file:', TOTAL_ROOMS);
+      }
       
       // Convert Mews data to dashboard format
       const hasMewsData = mewsData.daily.length > 0 || mewsData.weekly.length > 0 || mewsData.monthly.length > 0;
