@@ -553,12 +553,14 @@ const WeekStatsCard = ({ weekOffset, mewsData, settings }: { weekOffset: number;
   const fmt = (v: number) => `€${v.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`;
 
   const getWeekLabel = () => {
-    if (weekOffset === 0) return language === 'en' ? 'Current Week' : 'Huidige Week';
-    if (weekOffset === -1) return language === 'en' ? 'Last Week' : 'Vorige Week';
-    if (weekOffset === -2) return language === 'en' ? '2 Weeks Ago' : '2 Weken Geleden';
-    if (weekOffset === 1) return language === 'en' ? 'Next Week' : 'Volgende Week';
-    if (weekOffset === 2) return language === 'en' ? 'In 2 Weeks' : 'Over 2 Weken';
-    return '';
+    // Format: "Week 9 - Current" or "Week 10 - Next"
+    const weekLabel = `Week ${weekNumber}`;
+    if (weekOffset === 0) return `${weekLabel} - ${language === 'en' ? 'Current' : 'Huidige'}`;
+    if (weekOffset === -1) return `${weekLabel} - ${language === 'en' ? 'Last' : 'Vorige'}`;
+    if (weekOffset === -2) return `${weekLabel}`;
+    if (weekOffset === 1) return `${weekLabel} - ${language === 'en' ? 'Next' : 'Volgende'}`;
+    if (weekOffset === 2) return `${weekLabel}`;
+    return weekLabel;
   };
 
   const formatDateRange = () => {
