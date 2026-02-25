@@ -763,6 +763,10 @@ export default function Dashboard() {
         today.setHours(0, 0, 0, 0);
         const dayStats: DailyStats[] = [];
         
+        console.log('Building dayStats for today:', today.toISOString().split('T')[0]);
+        console.log('Mews arrivals data:', mewsData.arrivals);
+        console.log('Mews departures data:', mewsData.departures);
+        
         for (let i = -2; i <= 2; i++) {
           const d = new Date(today);
           d.setDate(today.getDate() + i);
@@ -779,12 +783,20 @@ export default function Dashboard() {
             });
           }
           
-          // Get arrivals/departures directly from mewsData
-          const arrivals = mewsData.arrivals?.find(a => a.date === dateStr)?.count || mewsDay?.arrivals || 0;
-          const departures = mewsData.departures?.find(dp => dp.date === dateStr)?.count || mewsDay?.departures || 0;
+          // Get arrivals/departures - check BOTH sources
+          const arrFromList = mewsData.arrivals?.find(a => a.date === dateStr)?.count || 0;
+          const depFromList = mewsData.departures?.find(dp => dp.date === dateStr)?.count || 0;
+          const arrFromDay = mewsDay?.arrivals || 0;
+          const depFromDay = mewsDay?.departures || 0;
+          
+          // Use whichever is greater (in case one source has data the other doesn't)
+          const arrivals = Math.max(arrFromList, arrFromDay);
+          const departures = Math.max(depFromList, depFromDay);
           
           // Get total rooms from the day's data or use the global TOTAL_ROOMS
           const dayTotalRooms = mewsDay?.availableRooms || TOTAL_ROOMS;
+          
+          console.log(`Day ${dateStr} (i=${i}): arrivals=${arrivals} (list:${arrFromList}, day:${arrFromDay}), departures=${departures} (list:${depFromList}, day:${depFromDay}), occupied=${mewsDay?.occupiedRooms || 0}`);
           
           // Use data if found, otherwise use averages
           dayStats.push({
@@ -795,12 +807,11 @@ export default function Dashboard() {
             arrivals: arrivals,
             departures: departures,
             room_revenue: mewsDay?.revenue || avgRev,
-            parking_revenue: 0,
+            parking_revenue: mewsDay?.parkingRevenue || 0,
             vending_revenue: 0,
-            city_tax: 0,
+            city_tax: mewsDay?.touristTax || 0,
             adr: mewsDay?.adr || avgAdr,
           });
-          console.log(`Day ${dateStr}: ${arrivals} arrivals, ${departures} departures, ${mewsDay?.occupiedRooms || 0} rooms / ${dayTotalRooms} total`);
         }
         setDayStatsArray(dayStats);
         console.log('dayStatsArray set with', dayStats.length, 'items');
