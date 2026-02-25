@@ -34,7 +34,10 @@ export interface MewsDailyData {
   occupancy: number; // percentage
   occupiedRooms: number;
   availableRooms: number;
-  revenue: number;
+  revenue: number; // Room revenue only
+  totalRevenue?: number; // Total (rooms + parking + tax)
+  parkingRevenue?: number;
+  touristTax?: number;
   adr: number;
   arrivals: number;
   departures: number;
