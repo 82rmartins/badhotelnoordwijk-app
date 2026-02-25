@@ -1075,7 +1075,7 @@ export default function Dashboard() {
           {/* Charts Swipeable */}
           <ScrollView ref={chartScrollRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={handleScroll(setCurrentChartIndex)} snapToInterval={CARD_WIDTH} decelerationRate="fast" contentContainerStyle={{ paddingHorizontal: 16 }}>
             <View style={{ width: CARD_WIDTH }}><WeeklyChart weekData={weekChartData} /></View>
-            <View style={{ width: CARD_WIDTH }}><MonthlyChart monthData={data?.month} /></View>
+            <View style={{ width: CARD_WIDTH }}><MonthlyChart monthData={data?.month} mewsData={mewsDataState} /></View>
           </ScrollView>
           <PaginationDots total={2} current={currentChartIndex} />
 
