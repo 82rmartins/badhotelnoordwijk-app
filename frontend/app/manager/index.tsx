@@ -25,11 +25,19 @@ import { getDayNames, getMonthNames, getFullMonthNames } from '../../utils/i18n'
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - 32;
 
+// Helper to format date as YYYY-MM-DD in local timezone
+const formatLocalDate = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 // Build dashboard data from Mews reports
 function buildDashboardFromMews(mewsData: MewsReportStore, settings: HotelSettings, lastUpdate: string | null): DashboardData {
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayStr = today.toISOString().split('T')[0];
+  today.setHours(12, 0, 0, 0); // Set to noon to avoid timezone edge cases
+  const todayStr = formatLocalDate(today);
   
   // Get total rooms from the daily data (read from file) or use settings
   // The availableRooms in daily data is calculated as: Accommodatie + None - OutOfOrder
