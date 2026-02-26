@@ -274,37 +274,43 @@ export async function loadMewsData(): Promise<MewsReportStore> {
     }
   }
 
+  // Convert weekly to legacy format (MewsDailyData compatible)
+  const weeklyLegacy: DailyData[] = data.weekly.map(w => ({
+    date: w.weekStart,
+    occupancy: w.occupancy,
+    occupiedRooms: w.occupied,
+    availableRooms: w.available,
+    revenue: w.revenueNights,
+    totalRevenue: w.totalRevenue,
+    parkingRevenue: w.parking,
+    touristTax: w.touristTax,
+    adr: w.adr,
+    arrivals: 0,
+    departures: 0,
+    customers: w.customers,
+  }));
+
+  // Convert monthly to legacy format (MewsDailyData compatible)
+  const monthlyLegacy: DailyData[] = data.monthly.map(m => ({
+    date: m.monthStart,
+    occupancy: m.occupancy,
+    occupiedRooms: m.occupied,
+    availableRooms: m.available,
+    revenue: m.revenueNights,
+    totalRevenue: m.totalRevenue,
+    parkingRevenue: m.parking,
+    touristTax: m.touristTax,
+    adr: m.adr,
+    arrivals: 0,
+    departures: 0,
+    customers: m.customers,
+  }));
+
   return {
     lastUpdate: data.lastUpdate,
     daily: data.daily,
-    weekly: data.weekly.map(w => ({
-      date: w.weekStart,
-      occupancy: w.occupancy,
-      occupiedRooms: w.occupied,
-      availableRooms: w.available,
-      revenue: w.revenueNights,
-      totalRevenue: w.totalRevenue,
-      parkingRevenue: w.parking,
-      touristTax: w.touristTax,
-      adr: w.adr,
-      arrivals: 0,
-      departures: 0,
-      customers: w.customers,
-    })),
-    monthly: data.monthly.map(m => ({
-      date: m.monthStart,
-      occupancy: m.occupancy,
-      occupiedRooms: m.occupied,
-      availableRooms: m.available,
-      revenue: m.revenueNights,
-      totalRevenue: m.totalRevenue,
-      parkingRevenue: m.parking,
-      touristTax: m.touristTax,
-      adr: m.adr,
-      arrivals: 0,
-      departures: 0,
-      customers: m.customers,
-    })),
+    weekly: weeklyLegacy,
+    monthly: monthlyLegacy,
     arrivals,
     departures,
     temperature: data.temperature,
