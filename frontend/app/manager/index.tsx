@@ -765,7 +765,11 @@ const styles = StyleSheet.create({
   subSectionTitle: { fontSize: 12, fontWeight: '600', color: '#9CA3AF', marginTop: 16, marginBottom: 12 },
   
   // Operation Card
-  operationCard: { backgroundColor: '#111113', borderRadius: 12, padding: 16, marginRight: 0, borderWidth: 1, borderColor: '#1F1F23' },
+  operationNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  operationNavBtn: { padding: 8, borderRadius: 8, backgroundColor: '#1F1F23' },
+  operationNavBtnDisabled: { opacity: 0.3 },
+  operationNavLabel: { fontSize: 12, color: '#9CA3AF', fontWeight: '600' },
+  operationCard: { backgroundColor: '#111113', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#1F1F23' },
   operationDateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 12, gap: 8 },
   operationDate: { fontSize: 14, color: '#9CA3AF', fontWeight: '600' },
   operationDateToday: { color: '#10B981' },
