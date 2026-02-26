@@ -65,103 +65,56 @@ export default function AdminScreen() {
     }
   };
 
-  // Process XLSX files and save to Mews data store (REPLACES, doesn't append)
+  // Process XLSX file and save to data store (REPLACES all existing data)
   const processAndSaveXLSXFiles = async (filesData: { content: ArrayBuffer | string, fileName: string }[]): Promise<string[]> => {
     const results: string[] = [];
     
-    // First, clear existing data to avoid duplicates
-    await clearAllData();
-    
-    // Collect all data by type
-    let dailyData: MewsDailyData[] = [];
-    const weeklyData: MewsDailyData[] = [];
-    const monthlyData: MewsDailyData[] = [];
-    let arrivalsData: { date: string; count: number }[] = [];
-    let departuresData: { date: string; count: number }[] = [];
-
-    for (const { content, fileName } of filesData) {
-      try {
-        const parseResult = parseXLSX(content, settings.total_rooms);
-        const { data, reportType, errors } = parseResult;
-
-        console.log(`Parsing ${fileName}: type=${reportType}, records=${data.length}`);
-
-        // Handle Bad Hotel combined format (has everything in one file)
-        if (reportType === 'badhotel') {
-          dailyData = data;
-          arrivalsData = parseResult.arrivalsData || [];
-          departuresData = parseResult.departuresData || [];
-          results.push(`✓ ${fileName} (Bad Hotel): ${data.length} days, ${arrivalsData.length} arrivals, ${departuresData.length} departures`);
-          continue;
-        }
-
-        // Handle Arrivals and Departures reports
-        if (reportType === 'arrivals') {
-          arrivalsData = parseResult.arrivalsData || [];
-          results.push(`✓ ${fileName} (Arrivals): ${arrivalsData.length} days`);
-          continue;
-        }
-        if (reportType === 'departures') {
-          departuresData = parseResult.departuresData || [];
-          results.push(`✓ ${fileName} (Departures): ${departuresData.length} days`);
-          continue;
-        }
-
-        if (data.length === 0) {
-          results.push(`✗ ${fileName}: ${errors.length > 0 ? errors[0] : 'No data found'}`);
-          continue;
-        }
-
-        // Sort data by type
-        if (reportType === 'daily') {
-          dailyData.push(...data);
-        } else if (reportType === 'weekly') {
-          weeklyData.push(...data);
-        } else if (reportType === 'monthly') {
-          monthlyData.push(...data);
-        } else {
-          // Unknown type - try to guess based on period format
-          monthlyData.push(...data);
-        }
-
-        const typeLabel = reportType === 'daily' ? 'Daily' : 
-                          reportType === 'weekly' ? 'Weekly' : 
-                          reportType === 'monthly' ? 'Monthly' : 'Report';
-        
-        results.push(`✓ ${fileName} (${typeLabel}): ${data.length} periods`);
-      } catch (error: any) {
-        results.push(`✗ ${fileName}: ${error.message}`);
-      }
+    // Only process first file (we only accept one file now)
+    if (filesData.length === 0) {
+      results.push('✗ No files provided');
+      return results;
     }
 
-    // Merge arrivals/departures into daily data (if not already merged from badhotel format)
-    for (const d of dailyData) {
-      if (!d.arrivals) {
-        const arrivalEntry = arrivalsData.find(a => a.date === d.date);
-        if (arrivalEntry) d.arrivals = arrivalEntry.count;
+    const { content, fileName } = filesData[0];
+
+    try {
+      console.log('[Admin] Parsing file:', fileName);
+      
+      // Parse using new Bad Hotel parser
+      const parseResult = parseBadHotelExcel(content);
+      
+      if (!parseResult.success) {
+        const errorMsg = parseResult.errors.length > 0 ? parseResult.errors[0] : 'Unknown error';
+        results.push(`✗ ${fileName}: ${errorMsg}`);
+        return results;
       }
-      if (!d.departures) {
-        const departureEntry = departuresData.find(dp => dp.date === d.date);
-        if (departureEntry) d.departures = departureEntry.count;
-      }
+
+      // Clear existing data first
+      await clearAllData();
+
+      // Save new data (COMPLETE REPLACEMENT)
+      await saveHotelData({
+        daily: parseResult.daily,
+        weekly: parseResult.weekly,
+        monthly: parseResult.monthly,
+        temperature: parseResult.temperature,
+      });
+
+      results.push(`✓ ${fileName}:`);
+      results.push(`   • ${parseResult.daily.length} days (2026_Values)`);
+      results.push(`   • ${parseResult.weekly.length} weeks (2026_Weekly)`);
+      results.push(`   • ${parseResult.monthly.length} months (2026_Monthly)`);
+
+      console.log('[Admin] Data saved successfully:', {
+        daily: parseResult.daily.length,
+        weekly: parseResult.weekly.length,
+        monthly: parseResult.monthly.length,
+      });
+
+    } catch (error: any) {
+      console.error('[Admin] Parse error:', error);
+      results.push(`✗ ${fileName}: ${error.message}`);
     }
-
-    // Save all collected data (REPLACES existing)
-    await saveMewsData({
-      daily: dailyData,
-      weekly: weeklyData,
-      monthly: monthlyData,
-      arrivals: arrivalsData,
-      departures: departuresData,
-    });
-
-    console.log('Saved Mews data:', { 
-      daily: dailyData.length, 
-      weekly: weeklyData.length, 
-      monthly: monthlyData.length,
-      arrivals: arrivalsData.length,
-      departures: departuresData.length,
-    });
 
     return results;
   };
