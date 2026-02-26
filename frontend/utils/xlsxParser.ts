@@ -1,37 +1,44 @@
-// XLSX Parser for Bad Hotel Manager 2026
-// Format: BadHotel_Manager_2026_Template_with_Formulas.xlsx
-// Sheets: 2026_Values, 2026_Weekly, 2026_Monthly (2026_Formulas ignored)
-// IMPORTANT: App NEVER calculates - only READS from Excel
+// ============================================
+// XLSX PARSER - BAD HOTEL 2026
+// ============================================
+// Contract: App NEVER calculates, only READS from Excel
+// File: BadHotel_Manager_2026_Template_with_Formulas.xlsx
+// Sheets: 2026_Values, 2026_Weekly, 2026_Monthly
 
 import * as XLSX from 'xlsx';
 
 // ============================================
-// DATA TYPES
+// DATA TYPES - Exact Excel Structure
 // ============================================
 
 export interface DailyData {
-  date: string; // YYYY-MM-DD
-  occupancy: number; // percentage (0-100)
-  occupiedRooms: number;
-  availableRooms: number;
-  revenue: number; // Revenue (nights)
-  totalRevenue: number;
-  parkingRevenue: number;
-  touristTax: number;
-  adr: number; // Average rate (nightly)
-  arrivals: number;
-  departures: number;
-  customers: number;
-  temperature?: number; // From Excel when available
+  date: string;           // DD-MM-YYYY (Excel format)
+  dateISO: string;        // YYYY-MM-DD (for sorting)
+  occupancy: number;      // Percentage 0-100 (from fraction)
+  occupied: number;       // Rooms occupied
+  available: number;      // Rooms available (usually 28)
+  totalRevenue: number;   // Total Revenue row ONLY
+  revenueNights: number;  // Revenue (nights)
+  adr: number;            // Average rate (nightly)
+  parking: number;        // Total revenue Parking
+  touristTax: number;     // Turist tax revenue
+  arrivals: number;       // Arrival
+  departures: number;     // Departure
+  customers: number;      // Customers
+  // Weather data (may be null)
+  temperature?: number;   // Weather row
+  weatherCondition?: string; // Partly Cloud row
+  humidity?: number;      // Humidade row
+  wind?: number;          // ventos row
 }
 
 export interface WeeklyData {
-  isoWeek: string; // e.g. "2026-W09"
-  weekStart: string; // YYYY-MM-DD
-  weekEnd: string;
+  isoWeek: string;        // e.g. "2026-W09"
+  weekStart: string;      // YYYY-MM-DD
+  weekEnd: string;        // YYYY-MM-DD
   available: number;
   occupied: number;
-  occupancy: number; // percentage (0-100)
+  occupancy: number;      // Percentage 0-100
   revenueNights: number;
   adr: number;
   customers: number;
@@ -41,12 +48,13 @@ export interface WeeklyData {
 }
 
 export interface MonthlyData {
-  month: string; // e.g. "February"
-  monthStart: string; // YYYY-MM-DD
-  monthEnd: string;
+  month: string;          // e.g. "February"
+  monthIndex: number;     // 0-11
+  monthStart: string;     // YYYY-MM-DD
+  monthEnd: string;       // YYYY-MM-DD
   available: number;
   occupied: number;
-  occupancy: number; // percentage (0-100)
+  occupancy: number;      // Percentage 0-100
   revenueNights: number;
   adr: number;
   customers: number;
@@ -55,22 +63,47 @@ export interface MonthlyData {
   totalRevenue: number;
 }
 
-export interface ParsedBadHotelData {
+export interface ParsedHotelData {
   daily: DailyData[];
   weekly: WeeklyData[];
   monthly: MonthlyData[];
   errors: string[];
   success: boolean;
-  temperature?: number; // Today's temperature from Excel
 }
+
+// ============================================
+// ROW MAPPING - 2026_Values (1-indexed)
+// ============================================
+const ROW_MAP = {
+  // Row 1 = dates header
+  PARKING: 2,           // Total revenue Parking
+  OCCUPANCY: 3,         // Occupancy (fraction 0-1)
+  AVAILABLE: 4,         // Available
+  OCCUPIED: 5,          // Occupied
+  REVENUE_NIGHTS: 6,    // Revenue (nights)
+  ADR: 7,               // Average rate (nightly)
+  CUSTOMERS: 8,         // Customers
+  // Row 9 = Revenue (duplicate, skip)
+  TOURIST_TAX: 10,      // Turist tax revenue
+  // Row 11 = Revenue (duplicate, skip)
+  TOTAL_REVENUE: 12,    // Total Revenue ← THE ONE TO USE
+  // Row 13 = empty
+  ARRIVAL: 14,          // Arrival
+  DEPARTURE: 15,        // Departure
+  // Row 16 = empty
+  WEATHER: 17,          // Weather (temperature)
+  WEATHER_COND: 18,     // Partly Cloud
+  HUMIDITY: 19,         // Humidade
+  WIND: 20,             // ventos
+};
 
 // ============================================
 // MAIN PARSER
 // ============================================
 
-export function parseBadHotelExcel(content: string | ArrayBuffer): ParsedBadHotelData {
+export function parseBadHotelExcel(content: string | ArrayBuffer): ParsedHotelData {
   const errors: string[] = [];
-  const result: ParsedBadHotelData = {
+  const result: ParsedHotelData = {
     daily: [],
     weekly: [],
     monthly: [],
@@ -79,21 +112,18 @@ export function parseBadHotelExcel(content: string | ArrayBuffer): ParsedBadHote
   };
 
   try {
-    // Read workbook
     const workbook = XLSX.read(content, {
       type: typeof content === 'string' ? 'base64' : 'array',
       cellDates: true,
-      cellNF: true,
     });
 
-    console.log('[Parser] Sheets found:', workbook.SheetNames);
+    console.log('[Parser] Sheets:', workbook.SheetNames);
 
-    // Validate required sheets exist
-    const requiredSheets = ['2026_Values', '2026_Weekly', '2026_Monthly'];
-    const missingSheets = requiredSheets.filter(s => !workbook.SheetNames.includes(s));
-    
-    if (missingSheets.length > 0) {
-      errors.push(`Missing required sheets: ${missingSheets.join(', ')}`);
+    // Validate required sheets
+    const required = ['2026_Values', '2026_Weekly', '2026_Monthly'];
+    const missing = required.filter(s => !workbook.SheetNames.includes(s));
+    if (missing.length > 0) {
+      errors.push(`Missing sheets: ${missing.join(', ')}`);
       result.errors = errors;
       return result;
     }
@@ -103,25 +133,16 @@ export function parseBadHotelExcel(content: string | ArrayBuffer): ParsedBadHote
     result.weekly = parseWeeklySheet(workbook.Sheets['2026_Weekly'], errors);
     result.monthly = parseMonthlySheet(workbook.Sheets['2026_Monthly'], errors);
 
-    // Get today's temperature if available
-    const today = getTodayDateStr();
-    const todayData = result.daily.find(d => d.date === today);
-    if (todayData?.temperature !== undefined) {
-      result.temperature = todayData.temperature;
-    }
-
     result.errors = errors;
     result.success = errors.length === 0 && result.daily.length > 0;
 
-    console.log('[Parser] Parsed successfully:', {
+    console.log('[Parser] Result:', {
       daily: result.daily.length,
       weekly: result.weekly.length,
       monthly: result.monthly.length,
-      errors: errors.length,
     });
 
   } catch (error: any) {
-    console.error('[Parser] Critical error:', error);
     errors.push(`Parse error: ${error.message}`);
     result.errors = errors;
   }
@@ -130,232 +151,193 @@ export function parseBadHotelExcel(content: string | ArrayBuffer): ParsedBadHote
 }
 
 // ============================================
-// PARSE 2026_Values SHEET (Transposed format)
+// PARSE 2026_Values (TRANSPOSED FORMAT)
+// Dates in Row 1, Metrics in Column A
 // ============================================
 
 function parseValuesSheet(sheet: XLSX.WorkSheet, errors: string[]): DailyData[] {
   const data: DailyData[] = [];
 
   try {
-    const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
+    // Convert to 2D array (0-indexed)
+    const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
     
-    if (jsonData.length < 15) {
-      errors.push('2026_Values: Insufficient rows (expected at least 15)');
+    if (rows.length < 15) {
+      errors.push('2026_Values: Not enough rows');
       return data;
     }
 
-    // Row mapping (0-indexed, but row 1 in Excel = index 0)
-    // Row 1 (index 0): Dates header
-    // Row 2 (index 1): Total revenue Parking
-    // Row 3 (index 2): Occupancy
-    // Row 4 (index 3): Available
-    // Row 5 (index 4): Occupied
-    // Row 6 (index 5): Revenue (nights)
-    // Row 7 (index 6): Average rate (nightly)
-    // Row 8 (index 7): Customers
-    // Row 9 (index 8): Revenue
-    // Row 10 (index 9): Turist tax revenue
-    // Row 11 (index 10): Revenue
-    // Row 12 (index 11): Total Revenue
-    // Row 14 (index 13): Arrival
-    // Row 15 (index 14): Departure
-
-    const ROW_PARKING = 1;
-    const ROW_OCCUPANCY = 2;
-    const ROW_AVAILABLE = 3;
-    const ROW_OCCUPIED = 4;
-    const ROW_REVENUE_NIGHTS = 5;
-    const ROW_ADR = 6;
-    const ROW_CUSTOMERS = 7;
-    const ROW_TOURIST_TAX = 9;
-    const ROW_TOTAL_REVENUE = 11;
-    const ROW_ARRIVAL = 13;
-    const ROW_DEPARTURE = 14;
-
-    // Find temperature row if it exists (look for "Temperature" label in column A)
-    let ROW_TEMPERATURE = -1;
-    for (let row = 0; row < jsonData.length; row++) {
-      const label = String(jsonData[row]?.[0] || '').toLowerCase();
-      if (label.includes('temp')) {
-        ROW_TEMPERATURE = row;
-        console.log('[Parser] Found temperature row:', row);
-        break;
-      }
-    }
-
-    // Parse each date column (starting from column 2, index 1)
-    const headerRow = jsonData[0];
+    const headerRow = rows[0]; // Row 1 = dates
     
+    // Parse each date column (starting col 2, index 1)
     for (let col = 1; col < headerRow.length; col++) {
       const dateVal = headerRow[col];
-      
-      // Skip "Total" column or empty
       if (!dateVal || String(dateVal).toLowerCase() === 'total') continue;
 
-      // Parse date
-      const dateStr = parseDateValue(dateVal);
-      if (!dateStr) continue;
+      // Parse date to DD-MM-YYYY
+      const { dateDDMMYYYY, dateISO } = parseDate(dateVal);
+      if (!dateDDMMYYYY) continue;
 
-      // Extract values (handle null/undefined as 0)
+      // Helper to get value from specific row
       const getValue = (rowIndex: number): number => {
-        if (rowIndex < 0 || rowIndex >= jsonData.length) return 0;
-        const val = jsonData[rowIndex]?.[col];
+        // Convert from 1-indexed row to 0-indexed array
+        const arrayRow = rowIndex - 1;
+        if (arrayRow < 0 || arrayRow >= rows.length) return 0;
+        const val = rows[arrayRow]?.[col];
         if (val === null || val === undefined || val === '') return 0;
         return typeof val === 'number' ? val : parseFloat(String(val)) || 0;
       };
 
-      // Get occupancy (convert from decimal 0-1 to percentage 0-100)
-      let occupancy = getValue(ROW_OCCUPANCY);
+      const getStringValue = (rowIndex: number): string | undefined => {
+        const arrayRow = rowIndex - 1;
+        if (arrayRow < 0 || arrayRow >= rows.length) return undefined;
+        const val = rows[arrayRow]?.[col];
+        return val ? String(val) : undefined;
+      };
+
+      // Get occupancy (fraction → percentage)
+      let occupancy = getValue(ROW_MAP.OCCUPANCY);
       if (occupancy > 0 && occupancy <= 1) {
         occupancy = occupancy * 100;
       }
 
-      const dayData: DailyData = {
-        date: dateStr,
-        occupancy: Math.round(occupancy * 10) / 10,
-        occupiedRooms: Math.round(getValue(ROW_OCCUPIED)),
-        availableRooms: Math.round(getValue(ROW_AVAILABLE)) || 28, // Default to 28 if missing
-        revenue: Math.round(getValue(ROW_REVENUE_NIGHTS) * 100) / 100,
-        totalRevenue: Math.round(getValue(ROW_TOTAL_REVENUE) * 100) / 100,
-        parkingRevenue: Math.round(getValue(ROW_PARKING) * 100) / 100,
-        touristTax: Math.round(getValue(ROW_TOURIST_TAX) * 100) / 100,
-        adr: Math.round(getValue(ROW_ADR) * 100) / 100,
-        arrivals: Math.round(getValue(ROW_ARRIVAL)),
-        departures: Math.round(getValue(ROW_DEPARTURE)),
-        customers: Math.round(getValue(ROW_CUSTOMERS)),
-      };
-
-      // Add temperature if row exists
-      if (ROW_TEMPERATURE >= 0) {
-        dayData.temperature = getValue(ROW_TEMPERATURE);
+      // Get humidity (fraction → percentage)
+      let humidity = getValue(ROW_MAP.HUMIDITY);
+      if (humidity > 0 && humidity <= 1) {
+        humidity = humidity * 100;
       }
 
-      data.push(dayData);
+      data.push({
+        date: dateDDMMYYYY,
+        dateISO: dateISO,
+        occupancy: Math.round(occupancy * 100) / 100,
+        occupied: Math.round(getValue(ROW_MAP.OCCUPIED)),
+        available: Math.round(getValue(ROW_MAP.AVAILABLE)) || 28,
+        totalRevenue: Math.round(getValue(ROW_MAP.TOTAL_REVENUE) * 100) / 100,
+        revenueNights: Math.round(getValue(ROW_MAP.REVENUE_NIGHTS) * 100) / 100,
+        adr: Math.round(getValue(ROW_MAP.ADR) * 100) / 100,
+        parking: Math.round(getValue(ROW_MAP.PARKING) * 100) / 100,
+        touristTax: Math.round(getValue(ROW_MAP.TOURIST_TAX) * 100) / 100,
+        arrivals: Math.round(getValue(ROW_MAP.ARRIVAL)),
+        departures: Math.round(getValue(ROW_MAP.DEPARTURE)),
+        customers: Math.round(getValue(ROW_MAP.CUSTOMERS)),
+        temperature: getValue(ROW_MAP.WEATHER) || undefined,
+        weatherCondition: getStringValue(ROW_MAP.WEATHER_COND),
+        humidity: humidity || undefined,
+        wind: getValue(ROW_MAP.WIND) || undefined,
+      });
     }
 
-    // Sort by date
-    data.sort((a, b) => a.date.localeCompare(b.date));
-
-    console.log('[Parser] 2026_Values: Parsed', data.length, 'days');
+    // Sort by ISO date
+    data.sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+    console.log('[Parser] 2026_Values:', data.length, 'days');
 
   } catch (error: any) {
-    errors.push(`2026_Values parse error: ${error.message}`);
+    errors.push(`2026_Values error: ${error.message}`);
   }
 
   return data;
 }
 
 // ============================================
-// PARSE 2026_Weekly SHEET
+// PARSE 2026_Weekly
 // ============================================
 
 function parseWeeklySheet(sheet: XLSX.WorkSheet, errors: string[]): WeeklyData[] {
   const data: WeeklyData[] = [];
 
   try {
-    const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
+    const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
     
-    if (jsonData.length < 2) {
-      errors.push('2026_Weekly: No data rows found');
-      return data;
-    }
+    // Skip header row (index 0)
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || !row[0]) continue;
 
-    // Headers are in row 1:
-    // ISO Week, Week Start, Week End, Available (sum), Occupied (sum), Occupancy,
-    // Revenue Nights (€), ADR (€), Customers (sum), Tourist Tax (€), Parking (€), Total Revenue (€)
-
-    // Parse data rows (starting from row 2, index 1)
-    for (let row = 1; row < jsonData.length; row++) {
-      const rowData = jsonData[row];
-      if (!rowData || !rowData[0]) continue;
-
-      const isoWeek = String(rowData[0] || '');
+      const isoWeek = String(row[0]);
       if (!isoWeek.startsWith('2026-W')) continue;
 
-      // Get occupancy (convert from decimal to percentage if needed)
-      let occupancy = parseFloat(rowData[5]) || 0;
+      // Get occupancy (fraction → percentage)
+      let occupancy = parseFloat(row[5]) || 0;
       if (occupancy > 0 && occupancy <= 1) {
         occupancy = occupancy * 100;
       }
 
       data.push({
         isoWeek,
-        weekStart: parseDateValue(rowData[1]) || '',
-        weekEnd: parseDateValue(rowData[2]) || '',
-        available: Math.round(parseFloat(rowData[3]) || 0),
-        occupied: Math.round(parseFloat(rowData[4]) || 0),
-        occupancy: Math.round(occupancy * 10) / 10,
-        revenueNights: Math.round((parseFloat(rowData[6]) || 0) * 100) / 100,
-        adr: Math.round((parseFloat(rowData[7]) || 0) * 100) / 100,
-        customers: Math.round(parseFloat(rowData[8]) || 0),
-        touristTax: Math.round((parseFloat(rowData[9]) || 0) * 100) / 100,
-        parking: Math.round((parseFloat(rowData[10]) || 0) * 100) / 100,
-        totalRevenue: Math.round((parseFloat(rowData[11]) || 0) * 100) / 100,
+        weekStart: formatDateToISO(row[1]),
+        weekEnd: formatDateToISO(row[2]),
+        available: Math.round(parseFloat(row[3]) || 0),
+        occupied: Math.round(parseFloat(row[4]) || 0),
+        occupancy: Math.round(occupancy * 100) / 100,
+        revenueNights: Math.round((parseFloat(row[6]) || 0) * 100) / 100,
+        adr: Math.round((parseFloat(row[7]) || 0) * 100) / 100,
+        customers: Math.round(parseFloat(row[8]) || 0),
+        touristTax: Math.round((parseFloat(row[9]) || 0) * 100) / 100,
+        parking: Math.round((parseFloat(row[10]) || 0) * 100) / 100,
+        totalRevenue: Math.round((parseFloat(row[11]) || 0) * 100) / 100,
       });
     }
 
-    console.log('[Parser] 2026_Weekly: Parsed', data.length, 'weeks');
+    console.log('[Parser] 2026_Weekly:', data.length, 'weeks');
 
   } catch (error: any) {
-    errors.push(`2026_Weekly parse error: ${error.message}`);
+    errors.push(`2026_Weekly error: ${error.message}`);
   }
 
   return data;
 }
 
 // ============================================
-// PARSE 2026_Monthly SHEET
+// PARSE 2026_Monthly
 // ============================================
 
 function parseMonthlySheet(sheet: XLSX.WorkSheet, errors: string[]): MonthlyData[] {
   const data: MonthlyData[] = [];
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                      'July', 'August', 'September', 'October', 'November', 'December'];
 
   try {
-    const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
+    const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
     
-    if (jsonData.length < 2) {
-      errors.push('2026_Monthly: No data rows found');
-      return data;
-    }
+    // Skip header row
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || !row[0]) continue;
 
-    // Headers are in row 1:
-    // Month, Month Start, Month End, Available (sum), Occupied (sum), Occupancy,
-    // Revenue Nights (€), ADR (€), Customers (sum), Tourist Tax (€), Parking (€), Total Revenue (€)
+      const month = String(row[0]);
+      const monthIndex = monthNames.indexOf(month);
+      if (monthIndex === -1) continue;
 
-    // Parse data rows (starting from row 2, index 1)
-    for (let row = 1; row < jsonData.length; row++) {
-      const rowData = jsonData[row];
-      if (!rowData || !rowData[0]) continue;
-
-      const month = String(rowData[0] || '');
-      if (!month) continue;
-
-      // Get occupancy (convert from decimal to percentage if needed)
-      let occupancy = parseFloat(rowData[5]) || 0;
+      // Get occupancy (fraction → percentage)
+      let occupancy = parseFloat(row[5]) || 0;
       if (occupancy > 0 && occupancy <= 1) {
         occupancy = occupancy * 100;
       }
 
       data.push({
         month,
-        monthStart: parseDateValue(rowData[1]) || '',
-        monthEnd: parseDateValue(rowData[2]) || '',
-        available: Math.round(parseFloat(rowData[3]) || 0),
-        occupied: Math.round(parseFloat(rowData[4]) || 0),
-        occupancy: Math.round(occupancy * 10) / 10,
-        revenueNights: Math.round((parseFloat(rowData[6]) || 0) * 100) / 100,
-        adr: Math.round((parseFloat(rowData[7]) || 0) * 100) / 100,
-        customers: Math.round(parseFloat(rowData[8]) || 0),
-        touristTax: Math.round((parseFloat(rowData[9]) || 0) * 100) / 100,
-        parking: Math.round((parseFloat(rowData[10]) || 0) * 100) / 100,
-        totalRevenue: Math.round((parseFloat(rowData[11]) || 0) * 100) / 100,
+        monthIndex,
+        monthStart: formatDateToISO(row[1]),
+        monthEnd: formatDateToISO(row[2]),
+        available: Math.round(parseFloat(row[3]) || 0),
+        occupied: Math.round(parseFloat(row[4]) || 0),
+        occupancy: Math.round(occupancy * 100) / 100,
+        revenueNights: Math.round((parseFloat(row[6]) || 0) * 100) / 100,
+        adr: Math.round((parseFloat(row[7]) || 0) * 100) / 100,
+        customers: Math.round(parseFloat(row[8]) || 0),
+        touristTax: Math.round((parseFloat(row[9]) || 0) * 100) / 100,
+        parking: Math.round((parseFloat(row[10]) || 0) * 100) / 100,
+        totalRevenue: Math.round((parseFloat(row[11]) || 0) * 100) / 100,
       });
     }
 
-    console.log('[Parser] 2026_Monthly: Parsed', data.length, 'months');
+    // Sort by month index
+    data.sort((a, b) => a.monthIndex - b.monthIndex);
+    console.log('[Parser] 2026_Monthly:', data.length, 'months');
 
   } catch (error: any) {
-    errors.push(`2026_Monthly parse error: ${error.message}`);
+    errors.push(`2026_Monthly error: ${error.message}`);
   }
 
   return data;
@@ -365,49 +347,70 @@ function parseMonthlySheet(sheet: XLSX.WorkSheet, errors: string[]): MonthlyData
 // HELPER FUNCTIONS
 // ============================================
 
-function parseDateValue(dateVal: any): string | null {
-  if (!dateVal) return null;
+function parseDate(dateVal: any): { dateDDMMYYYY: string | null; dateISO: string } {
+  if (!dateVal) return { dateDDMMYYYY: null, dateISO: '' };
 
   try {
-    // If it's already a Date object
+    // If Date object
     if (dateVal instanceof Date) {
-      return formatDateToISO(dateVal);
+      const d = dateVal.getDate();
+      const m = dateVal.getMonth() + 1;
+      const y = dateVal.getFullYear();
+      return {
+        dateDDMMYYYY: `${String(d).padStart(2, '0')}-${String(m).padStart(2, '0')}-${y}`,
+        dateISO: `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+      };
     }
 
     const str = String(dateVal);
 
-    // Try DD-MM-YYYY format (European)
-    const ddmmMatch = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
-    if (ddmmMatch) {
-      const d = parseInt(ddmmMatch[1], 10);
-      const m = parseInt(ddmmMatch[2], 10) - 1;
-      const y = parseInt(ddmmMatch[3], 10);
-      return formatDateToISO(new Date(y, m, d));
-    }
-
-    // Try ISO format YYYY-MM-DD
-    const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (isoMatch) {
-      return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+    // Try DD-MM-YYYY
+    const match = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (match) {
+      const d = parseInt(match[1], 10);
+      const m = parseInt(match[2], 10);
+      const y = parseInt(match[3], 10);
+      return {
+        dateDDMMYYYY: `${String(d).padStart(2, '0')}-${String(m).padStart(2, '0')}-${y}`,
+        dateISO: `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+      };
     }
 
   } catch {
-    // Ignore parse errors
+    // Ignore
   }
 
-  return null;
+  return { dateDDMMYYYY: null, dateISO: '' };
 }
 
-function formatDateToISO(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+function formatDateToISO(dateVal: any): string {
+  if (!dateVal) return '';
+  if (dateVal instanceof Date) {
+    return dateVal.toISOString().split('T')[0];
+  }
+  return '';
 }
 
-function getTodayDateStr(): string {
+// ============================================
+// UTILITY: Get Today's Date Key (DD-MM-YYYY)
+// Uses Europe/Amsterdam timezone
+// ============================================
+
+export function getTodayDateKey(): string {
   const now = new Date();
-  // Use Europe/Amsterdam timezone
+  const options: Intl.DateTimeFormatOptions = {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'Europe/Amsterdam',
+  };
+  // Format: DD/MM/YYYY → convert to DD-MM-YYYY
+  const formatted = new Intl.DateTimeFormat('en-GB', options).format(now);
+  return formatted.replace(/\//g, '-');
+}
+
+export function getTodayISO(): string {
+  const now = new Date();
   const options: Intl.DateTimeFormatOptions = {
     year: 'numeric',
     month: '2-digit',
@@ -415,18 +418,13 @@ function getTodayDateStr(): string {
     timeZone: 'Europe/Amsterdam',
   };
   const parts = new Intl.DateTimeFormat('en-CA', options).formatToParts(now);
-  const year = parts.find(p => p.type === 'year')?.value;
-  const month = parts.find(p => p.type === 'month')?.value;
-  const day = parts.find(p => p.type === 'day')?.value;
-  return `${year}-${month}-${day}`;
+  const y = parts.find(p => p.type === 'year')?.value;
+  const m = parts.find(p => p.type === 'month')?.value;
+  const d = parts.find(p => p.type === 'day')?.value;
+  return `${y}-${m}-${d}`;
 }
 
-// ============================================
-// UTILITY FUNCTIONS FOR APP
-// ============================================
-
-// Get current ISO week number
-export function getCurrentISOWeek(): string {
+export function getCurrentWeekISO(): string {
   const now = new Date();
   const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
   const dayNum = d.getUTCDay() || 7;
@@ -436,22 +434,6 @@ export function getCurrentISOWeek(): string {
   return `2026-W${String(weekNum).padStart(2, '0')}`;
 }
 
-// Get current month name
-export function getCurrentMonthName(): string {
-  const months = ['January', 'February', 'March', 'April', 'May', 'June',
-                  'July', 'August', 'September', 'October', 'November', 'December'];
-  return months[new Date().getMonth()];
-}
-
-// Get weeks for current month from weekly data
-export function getWeeksForMonth(weekly: WeeklyData[], month: number, year: number = 2026): WeeklyData[] {
-  return weekly.filter(w => {
-    if (!w.weekStart) return false;
-    const startDate = new Date(w.weekStart);
-    // Include weeks that overlap with the month
-    const endDate = new Date(w.weekEnd);
-    const monthStart = new Date(year, month, 1);
-    const monthEnd = new Date(year, month + 1, 0);
-    return startDate <= monthEnd && endDate >= monthStart;
-  });
+export function getCurrentMonthIndex(): number {
+  return new Date().getMonth(); // 0-11
 }
