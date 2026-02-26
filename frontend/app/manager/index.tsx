@@ -466,6 +466,7 @@ export default function ManagerDashboard() {
             <HelpIcon tooltipKey="operation" />
           </View>
           
+          {operationDays.length > 0 ? (
           <ScrollView
             ref={operationScrollRef}
             horizontal
@@ -475,6 +476,7 @@ export default function ManagerDashboard() {
             contentContainerStyle={{ paddingHorizontal: 0 }}
             snapToInterval={OPERATION_CARD_WIDTH}
             decelerationRate="fast"
+            contentOffset={{ x: 2 * OPERATION_CARD_WIDTH, y: 0 }}
           >
             {operationDays.map((dayData, idx) => {
               const offsetFromToday = idx - 2; // Index 2 = today
