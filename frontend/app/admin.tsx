@@ -17,21 +17,16 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 
 import { 
-  saveReservations, 
-  loadReservations, 
   saveSettings, 
   loadSettings, 
   getLastUpdate,
   clearAllData,
-  saveMewsData,
-  loadMewsData,
+  saveHotelData,
+  loadHotelData,
   HotelSettings,
   DEFAULT_SETTINGS,
-  MewsDailyData 
 } from '../utils/storage';
-import { parseCSV } from '../utils/csvParser';
-import { parseXLSX } from '../utils/xlsxParser';
-import { generateDemoReservations } from '../utils/calculations';
+import { parseBadHotelExcel, DailyData, WeeklyData, MonthlyData } from '../utils/xlsxParser';
 import { useLanguage } from '../utils/LanguageContext';
 
 export default function AdminScreen() {
