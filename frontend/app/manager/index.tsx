@@ -467,16 +467,19 @@ export default function ManagerDashboard() {
           </View>
           
           {operationDays.length > 0 ? (
+          <>
           <ScrollView
             ref={operationScrollRef}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             onMomentumScrollEnd={handleOperationScroll}
-            contentContainerStyle={{ paddingHorizontal: 0 }}
+            onLayout={() => {
+              // Scroll to today on layout
+              operationScrollRef.current?.scrollTo({ x: 2 * OPERATION_CARD_WIDTH, animated: false });
+            }}
             snapToInterval={OPERATION_CARD_WIDTH}
             decelerationRate="fast"
-            contentOffset={{ x: 2 * OPERATION_CARD_WIDTH, y: 0 }}
           >
             {operationDays.map((dayData, idx) => {
               const offsetFromToday = idx - 2; // Index 2 = today
