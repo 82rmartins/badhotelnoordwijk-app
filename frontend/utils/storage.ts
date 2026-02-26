@@ -37,9 +37,14 @@ export interface HotelDataStore {
 
 // Legacy type alias for backward compatibility
 export type MewsDailyData = DailyData;
-export type MewsReportStore = HotelDataStore & {
+export type MewsReportStore = {
+  lastUpdate: string;
+  daily: DailyData[];
+  weekly: DailyData[]; // Legacy: converted from WeeklyData
+  monthly: DailyData[]; // Legacy: converted from MonthlyData
   arrivals?: { date: string; count: number }[];
   departures?: { date: string; count: number }[];
+  temperature?: number;
 };
 
 // ============================================
