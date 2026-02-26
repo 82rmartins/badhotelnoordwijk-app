@@ -31,7 +31,6 @@ import { useLanguage } from '../utils/LanguageContext';
 
 export default function AdminScreen() {
   const [uploading, setUploading] = useState(false);
-  const [seedingData, setSeedingData] = useState(false);
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [settings, setSettings] = useState<HotelSettings>(DEFAULT_SETTINGS);
   const [lastUpdate, setLastUpdate] = useState<string | null>(null);
