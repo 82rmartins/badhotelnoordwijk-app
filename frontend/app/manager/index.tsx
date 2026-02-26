@@ -537,6 +537,12 @@ export default function ManagerDashboard() {
               );
             })}
           </ScrollView>
+          ) : (
+            <View style={styles.noDataSmallBox}>
+              <ActivityIndicator size="small" color="#10B981" />
+              <Text style={styles.noDataSmall}>Loading...</Text>
+            </View>
+          )}
           
           {/* Pagination dots */}
           <View style={styles.paginationContainer}>
