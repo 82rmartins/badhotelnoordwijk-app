@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+// ============================================
+// MANAGER MODE - RESET TOTAL
+// ============================================
+// Contract: App NEVER calculates, only READS from Excel
+// All data comes from: BadHotel_Manager_2026_Template_with_Formulas.xlsx
+
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,1204 +12,784 @@ import {
   ScrollView,
   RefreshControl,
   Dimensions,
-  Animated,
   TouchableOpacity,
   ActivityIndicator,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
+  Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-import { loadReservations, loadSettings, getLastUpdate, DEFAULT_SETTINGS, saveSettings, saveReservations, loadMewsData, MewsDailyData, MewsReportStore, HotelSettings } from '../../utils/storage';
-import { calculateDashboard, DashboardData, generateDemoReservations, calculateDailyStats, DailyStats, EnhancedAlert, RadarDay } from '../../utils/calculations';
+import { loadHotelData, loadSettings, HotelDataStore, HotelSettings, DEFAULT_SETTINGS } from '../../utils/storage';
+import { DailyData, WeeklyData, MonthlyData, getTodayDateKey, getTodayISO, getCurrentWeekISO, getCurrentMonthIndex } from '../../utils/xlsxParser';
 import { useLanguage } from '../../utils/LanguageContext';
-import { getDayNames, getMonthNames, getFullMonthNames } from '../../utils/i18n';
 
 const { width } = Dimensions.get('window');
-const CARD_WIDTH = width - 32;
 
-// Helper to format date as YYYY-MM-DD in local timezone
-const formatLocalDate = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+// ============================================
+// TYPES
+// ============================================
 
-// Build dashboard data from Mews reports
-function buildDashboardFromMews(mewsData: MewsReportStore, settings: HotelSettings, lastUpdate: string | null): DashboardData {
-  const today = new Date();
-  today.setHours(12, 0, 0, 0); // Set to noon to avoid timezone edge cases
-  const todayStr = formatLocalDate(today);
-  
-  // Get total rooms from the daily data (read from file) or use settings
-  // The availableRooms in daily data is calculated as: Accommodatie + None - OutOfOrder
-  let TOTAL_ROOMS = settings.total_rooms;
-  if (mewsData.daily.length > 0 && mewsData.daily[0].availableRooms > 0) {
-    // Use the rooms count from the first daily record
-    TOTAL_ROOMS = mewsData.daily[0].availableRooms;
-    console.log('Using total rooms from file:', TOTAL_ROOMS);
-  }
-  
-  // Combine ALL data sources for lookup
-  const allData = [...mewsData.daily, ...mewsData.weekly, ...mewsData.monthly];
-  console.log('All data combined:', allData.length, 'records');
-  
-  // Get arrivals and departures data
-  const arrivalsMap = new Map<string, number>();
-  const departuresMap = new Map<string, number>();
-  
-  if (mewsData.arrivals) {
-    for (const a of mewsData.arrivals) {
-      arrivalsMap.set(a.date, a.count);
-    }
-  }
-  if (mewsData.departures) {
-    for (const d of mewsData.departures) {
-      departuresMap.set(d.date, d.count);
-    }
-  }
-  
-  // Find today's data specifically
-  const todayDataFromFile = mewsData.daily.find(d => d.date === todayStr);
-  
-  console.log('Looking for today:', todayStr, 'Found:', todayDataFromFile ? 'YES' : 'NO');
-  
-  // Calculate averages from all available data
-  let totalOcc = 0, totalRev = 0, totalAdr = 0, dataCount = 0;
-  for (const d of allData) {
-    if (d.occupancy > 0) {
-      totalOcc += d.occupancy;
-      totalRev += d.revenue;
-      totalAdr += d.adr;
-      dataCount++;
-    }
-  }
-  
-  const avgOcc = dataCount > 0 ? totalOcc / dataCount : 0;
-  const avgRev = dataCount > 0 ? totalRev / dataCount : 0;
-  const avgAdr = dataCount > 0 ? totalAdr / dataCount : 0;
-  
-  console.log('Calculated averages:', { avgOcc, avgRev, avgAdr, dataCount });
-  
-  // Get arrivals/departures for today
-  const todayArrivals = arrivalsMap.get(todayStr) || 0;
-  const todayDepartures = departuresMap.get(todayStr) || 0;
-  
-  // Use today's data from file, or calculate from averages
-  let todayOccupancy = avgOcc;
-  let todayOccupiedRooms = Math.round((avgOcc / 100) * TOTAL_ROOMS);
-  let todayRevenue = avgRev;
-  let todayAdr = avgAdr;
-  
-  if (todayDataFromFile) {
-    // Recalculate occupancy based on 24 rooms
-    todayOccupiedRooms = todayDataFromFile.occupiedRooms;
-    todayOccupancy = (todayOccupiedRooms / TOTAL_ROOMS) * 100;
-    todayRevenue = todayDataFromFile.revenue;
-    todayAdr = todayDataFromFile.adr;
-  }
-  
-  const todayData: DailyStats = {
-    date: today,
-    occupancy_percent: Math.round(todayOccupancy * 10) / 10,
-    rooms_occupied: todayOccupiedRooms,
-    total_rooms: TOTAL_ROOMS,
-    arrivals: todayArrivals,
-    departures: todayDepartures,
-    room_revenue: todayRevenue,
-    parking_revenue: 0,
-    vending_revenue: 0,
-    city_tax: 0,
-    adr: todayAdr,
-  };
-  
-  // Build radar from available data
-  const radar: RadarDay[] = [];
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const target = settings.high_season_target;
-  
-  // Build radar for next 14 days
-  for (let i = 0; i < 14; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    const dateStr = formatLocalDate(d);
-    
-    // Try to find matching data in daily data first
-    let dayData = mewsData.daily.find(m => m.date === dateStr);
-    
-    // If no exact match, use data from same weekday if we have weekly data
-    if (!dayData && mewsData.weekly.length > 0) {
-      const weekDataForDay = mewsData.weekly.find(w => {
-        const wDate = new Date(w.date);
-        return wDate.getDay() === d.getDay();
-      });
-      if (weekDataForDay) dayData = weekDataForDay;
-    }
-    
-    // Get rooms for this day
-    const dayTotalRooms = dayData?.availableRooms || TOTAL_ROOMS;
-    const occupiedRooms = dayData?.occupiedRooms || 0;
-    
-    // Use the occupancy from the file if available, otherwise calculate
-    let occ = dayData?.occupancy || 0;
-    if (occ === 0 && occupiedRooms > 0 && dayTotalRooms > 0) {
-      occ = (occupiedRooms / dayTotalRooms) * 100;
-    }
-    
-    radar.push({
-      date: d,
-      day_name: dayNames[d.getDay()],
-      day_num: d.getDate(),
-      month: monthNames[d.getMonth()],
-      occupancy_percent: Math.round(occ * 10) / 10,
-      rooms_sold: occupiedRooms,
-      total_rooms: dayTotalRooms,
-      adr: dayData?.adr || avgAdr,
-      target: target,
-      urgency: occ < target * 0.7 ? 'high' : occ < target * 0.9 ? 'medium' : 'low',
-    });
-  }
-  
-  // Calculate week stats from weekly data or averages
-  const weekStart = new Date(today);
-  weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  
-  // Use weekly data if available, otherwise use averages
-  let weekOccAvg = avgOcc;
-  let weekRevTotal = avgRev * 7;
-  let weekAdrAvg = avgAdr;
-  
-  if (mewsData.weekly.length > 0) {
-    const currentWeekData = mewsData.weekly[0]; // Most recent week
-    weekOccAvg = currentWeekData.occupancy;
-    weekRevTotal = currentWeekData.revenue;
-    weekAdrAvg = currentWeekData.adr;
-  }
-  
-  // Calculate month stats from monthly data or averages
-  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-  let monthOccAvg = avgOcc;
-  let monthRevTotal = avgRev * today.getDate();
-  
-  if (mewsData.monthly.length > 0) {
-    // Find current month data
-    const currentMonthName = monthNames[today.getMonth()];
-    const currentMonthData = mewsData.monthly.find(m => {
-      const mDate = new Date(m.date);
-      return mDate.getMonth() === today.getMonth();
-    }) || mewsData.monthly[0];
-    
-    if (currentMonthData) {
-      monthOccAvg = currentMonthData.occupancy;
-      monthRevTotal = currentMonthData.revenue;
-    }
-  }
-  
-  // Determine status based on available data
-  let status: 'green' | 'yellow' | 'red' = 'green';
-  let statusReason: string | null = null;
-  const statusReasonParams: string[] = [];
-  
-  const displayOcc = todayData.occupancy_percent;
-  
-  if (displayOcc < target * 0.7) {
-    status = 'red';
-    statusReason = 'today_occupancy_below';
-    statusReasonParams.push(`${Math.round(displayOcc)}`);
-  } else if (displayOcc < target * 0.9) {
-    status = 'yellow';
-    statusReason = 'today_occupancy_below';
-    statusReasonParams.push(`${Math.round(displayOcc)}`);
-  }
-  
-  // Build alerts
-  const alerts: EnhancedAlert[] = [];
-  
-  if (dataCount > 0) {
-    alerts.push({
-      message: avgOcc >= target * 0.9 ? 'no_critical_issues' : 'occupancy_below_target',
-      message_params: [Math.round(avgOcc).toString() + '%'],
-      today_status: avgOcc >= target * 0.9 ? 'ok' : avgOcc >= target * 0.7 ? 'warning' : 'critical',
-      future_status: avgOcc >= target * 0.9 ? 'ok' : 'warning',
-      context: avgOcc >= target * 0.9 ? 'next_days_on_track' : 'requires_attention',
-    });
-  } else {
-    alerts.push({
-      message: 'no_critical_issues',
-      message_params: [],
-      today_status: 'ok',
-      future_status: 'ok',
-      context: 'next_days_on_track',
-    });
-  }
-  
-  return {
-    status,
-    status_reason: statusReason,
-    status_reason_params: statusReasonParams,
-    rhythm: 'stable',
-    trend: 'stable',
-    last_update: lastUpdate,
-    today: todayData,
-    radar,
-    alerts,
-    week: {
-      start: weekStart,
-      end: weekEnd,
-      occupancy_avg: weekOccAvg,
-      revenue_total: weekRevTotal,
-      adr_avg: weekAdrAvg,
-      trend: 'stable',
-    },
-    month: {
-      name: monthNames[today.getMonth()],
-      occupancy_accumulated: monthOccAvg,
-      revenue_accumulated: monthRevTotal,
-      projected_occupancy: monthOccAvg,
-      days_elapsed: today.getDate(),
-      days_total: monthEnd.getDate(),
-    },
-  };
+interface TodayData {
+  date: string;
+  occupancy: number;
+  occupied: number;
+  available: number;
+  totalRevenue: number;
+  arrivals: number;
+  departures: number;
 }
 
-// Hotel Logo Component
-const HotelLogo = ({ size = 40 }: { size?: number }) => (
-  <View style={[logoStyles.container, { width: size, height: size }]}>
-    <View style={[logoStyles.topHalf, { borderTopLeftRadius: size/2, borderTopRightRadius: size/2 }]} />
-    <View style={[logoStyles.bottomHalf, { borderBottomLeftRadius: size/2, borderBottomRightRadius: size/2 }]}>
-      <View style={logoStyles.wave} />
-    </View>
-  </View>
-);
+// ============================================
+// TOOLTIP CONTENT (FIXED - NO AI)
+// ============================================
 
-const logoStyles = StyleSheet.create({
-  container: { overflow: 'hidden', borderRadius: 999 },
-  topHalf: { flex: 1, backgroundColor: '#8FAFC4' },
-  bottomHalf: { flex: 1, backgroundColor: '#5F7F94', position: 'relative' },
-  wave: { position: 'absolute', top: -6, left: 0, right: 0, height: 12, backgroundColor: '#8FAFC4', borderBottomLeftRadius: 100, borderBottomRightRadius: 100, transform: [{ scaleX: 1.5 }] },
-});
-
-// Animated Counter
-const AnimatedCounter = ({ value, suffix = '', style }: { value: number; suffix?: string; style?: any }) => {
-  const [displayValue, setDisplayValue] = useState(0);
-  const animatedValue = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    animatedValue.setValue(0);
-    Animated.timing(animatedValue, { toValue: value, duration: 800, useNativeDriver: false }).start();
-    const listener = animatedValue.addListener(({ value }) => setDisplayValue(value));
-    return () => animatedValue.removeListener(listener);
-  }, [value]);
-
-  return <Text style={style}>{displayValue.toFixed(0)}{suffix}</Text>;
+const TOOLTIPS = {
+  operation: "Shows today's real occupancy, rooms sold and total revenue based on the daily operational data uploaded.",
+  radar: "Displays day-by-day operational performance for the next 15 calendar days based on daily inputs.",
+  attention: "Highlights today's critical metrics that are below the defined operational targets.",
+  monthlyOccupancy: "Shows occupancy aggregated by calendar month using pre-calculated monthly data.",
+  weeklyStats: "Shows weekly performance metrics using ISO calendar weeks, including past and future periods.",
+  monthlyStats: "Shows accumulated monthly performance with historical and forward-looking context.",
 };
 
-// Real-time Clock
-const RealTimeClock = () => {
-  const [time, setTime] = useState(new Date());
-  useEffect(() => {
-    const timer = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-  return <Text style={styles.clockText}>{time.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</Text>;
-};
+// ============================================
+// MAIN COMPONENT
+// ============================================
 
-// Language Toggle
-const LanguageToggle = () => {
-  const { language, setLanguage } = useLanguage();
-  return (
-    <View style={styles.langToggle}>
-      <TouchableOpacity style={[styles.langBtn, language === 'en' && styles.langBtnActive]} onPress={() => setLanguage('en')}>
-        <Text style={[styles.langBtnText, language === 'en' && styles.langBtnTextActive]}>EN</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={[styles.langBtn, language === 'nl' && styles.langBtnActive]} onPress={() => setLanguage('nl')}>
-        <Text style={[styles.langBtnText, language === 'nl' && styles.langBtnTextActive]}>NL</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={[styles.langBtn, language === 'de' && styles.langBtnActive]} onPress={() => setLanguage('de')}>
-        <Text style={[styles.langBtnText, language === 'de' && styles.langBtnTextActive]}>DE</Text>
-      </TouchableOpacity>
-    </View>
-  );
-};
-
-// Status Badge
-const StatusBadge = ({ status, reason, reasonParams }: { status: 'green' | 'yellow' | 'red'; reason?: string | null; reasonParams?: string[] }) => {
-  const { t } = useLanguage();
-  const config = {
-    green: { color: '#10B981', text: t.underControl, icon: 'checkmark-circle' },
-    yellow: { color: '#F59E0B', text: t.attention, icon: 'warning' },
-    red: { color: '#EF4444', text: t.risk, icon: 'alert-circle' },
-  }[status];
-
-  const translateReason = (key: string | null, params: string[] = []) => {
-    if (!key) return null;
-    const map: Record<string, string> = { 'today_occupancy_below': t.todayOccupancyBelow, 'd7_below_target': t.d7BelowTarget, 'd14_below_target': t.d14BelowTarget };
-    let msg = map[key] || key;
-    params.forEach((p, i) => { msg = msg.replace(`{${i}}`, p); });
-    return msg;
-  };
-
-  return (
-    <View style={styles.statusContainer}>
-      <View style={[styles.statusBadge, { backgroundColor: config.color + '20' }]}>
-        <Ionicons name={config.icon as any} size={16} color={config.color} />
-        <Text style={[styles.statusText, { color: config.color }]}>{config.text}</Text>
-      </View>
-      {reason && status !== 'green' && <Text style={[styles.statusReason, { color: config.color }]}>{translateReason(reason, reasonParams || [])}</Text>}
-    </View>
-  );
-};
-
-// Trend Indicator
-const TrendIndicator = ({ trend }: { trend: 'improving' | 'stable' | 'worsening' }) => {
-  const { t } = useLanguage();
-  const config = { improving: { icon: '↑', text: t.improving, color: '#10B981' }, stable: { icon: '→', text: t.stable, color: '#6B7280' }, worsening: { icon: '↓', text: t.worsening, color: '#EF4444' } }[trend];
-  return (
-    <View style={styles.trendContainer}>
-      <Text style={[styles.trendArrow, { color: config.color }]}>{config.icon}</Text>
-      <Text style={[styles.trendText, { color: config.color }]}>{config.text}</Text>
-    </View>
-  );
-};
-
-// Pagination Dots
-const PaginationDots = ({ total, current }: { total: number; current: number }) => (
-  <View style={styles.paginationContainer}>
-    {Array.from({ length: total }).map((_, i) => (
-      <View key={i} style={[styles.paginationDot, current === i && styles.paginationDotActive]} />
-    ))}
-  </View>
-);
-
-// Day Card (Swipeable)
-const DayCard = ({ dayStats, dayLabel, isToday }: { dayStats: DailyStats | null; dayLabel: string; isToday: boolean }) => {
-  const { t } = useLanguage();
-  const fmt = (v: number) => `€${(v || 0).toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`;
-
-  if (!dayStats) return <View style={[styles.dayCard, { width: CARD_WIDTH }]}><ActivityIndicator color="#10B981" style={{ marginTop: 60 }} /></View>;
-
-  return (
-    <View style={[styles.dayCard, { width: CARD_WIDTH }]}>
-      <Text style={[styles.dayCardLabel, isToday && styles.dayCardLabelToday]}>{dayLabel}</Text>
-      <View style={styles.dayCardGrid}>
-        <View style={styles.dayCardOccupancy}>
-          <Text style={styles.dayCardOccLabel}>{t.occupancy}</Text>
-          <Text style={styles.dayCardOccValue}>{(dayStats.occupancy_percent || 0).toFixed(0)}%</Text>
-          <Text style={styles.dayCardOccRooms}>{dayStats.rooms_occupied || 0} / {dayStats.total_rooms || 24} {t.rooms}</Text>
-        </View>
-        <View style={styles.dayCardArrDep}>
-          <View style={styles.dayCardArrDepItem}>
-            <Ionicons name="log-in" size={16} color="#10B981" />
-            <Text style={styles.dayCardArrDepValue}>{dayStats.arrivals || 0}</Text>
-            <Text style={styles.dayCardArrDepLabel}>{t.arrivals}</Text>
-          </View>
-          <View style={styles.dayCardDivider} />
-          <View style={styles.dayCardArrDepItem}>
-            <Ionicons name="log-out" size={16} color="#F59E0B" />
-            <Text style={styles.dayCardArrDepValue}>{dayStats.departures || 0}</Text>
-            <Text style={styles.dayCardArrDepLabel}>{t.departures}</Text>
-          </View>
-        </View>
-      </View>
-      <View style={styles.dayCardRevenue}>
-        <Text style={styles.dayCardRevTitle}>{t.dailyRevenue}</Text>
-        <View style={styles.dayCardRevGrid}>
-          <View style={styles.dayCardRevItem}><Ionicons name="bed" size={14} color="#60A5FA" /><Text style={styles.dayCardRevValue}>{fmt(dayStats.room_revenue)}</Text></View>
-          <View style={styles.dayCardRevItem}><Ionicons name="car" size={14} color="#A78BFA" /><Text style={styles.dayCardRevValue}>{fmt(dayStats.parking_revenue)}</Text></View>
-          <View style={styles.dayCardRevItem}><Ionicons name="cafe" size={14} color="#F472B6" /><Text style={styles.dayCardRevValue}>{fmt(dayStats.vending_revenue)}</Text></View>
-        </View>
-        <Text style={styles.dayCardTax}>{t.cityTax}: {fmt(dayStats.city_tax)} ({t.separate})</Text>
-      </View>
-    </View>
-  );
-};
-
-// Radar Day Card
-const RadarDayCard = ({ day, index }: { day: any; index: number }) => {
+export default function ManagerDashboard() {
+  const router = useRouter();
   const { language } = useLanguage();
-  const dayNames = getDayNames(language);
-  const monthNames = getMonthNames(language);
-  const d = new Date(day.date);
-  const urgencyColor = day.occupancy_percent >= day.target * 0.9 ? '#10B981' : day.occupancy_percent >= day.target * 0.7 ? '#F59E0B' : '#EF4444';
-  const borderColor = day.urgency === 'high' ? '#EF4444' : day.urgency === 'medium' ? '#F59E0B' : '#374151';
-
-  return (
-    <View style={[styles.radarCard, { borderLeftColor: borderColor, borderLeftWidth: 3 }, index === 0 && styles.radarCardFirst]}>
-      <View style={styles.radarDateContainer}>
-        <Text style={styles.radarDayName}>{dayNames[d.getDay()]}</Text>
-        <Text style={styles.radarDayNum}>{day.day_num}</Text>
-        <Text style={styles.radarMonth}>{monthNames[d.getMonth()]}</Text>
-      </View>
-      <View style={styles.radarStatsContainer}>
-        <Text style={[styles.radarOccupancyValue, { color: urgencyColor }]}>{day.occupancy_percent.toFixed(0)}%</Text>
-        <Text style={styles.radarRoomsValue}>{day.rooms_sold}/{day.total_rooms}</Text>
-        {day.adr > 0 && <Text style={styles.radarAdrValue}>€{day.adr.toFixed(0)}</Text>}
-      </View>
-    </View>
-  );
-};
-
-// Alert Item
-const AlertItem = ({ alert }: { alert: any }) => {
-  const { t } = useLanguage();
-  const color = (s: string) => s === 'ok' ? '#10B981' : s === 'warning' ? '#F59E0B' : '#EF4444';
-  const msgMap: Record<string, string> = { 'occupancy_below_target': t.occupancyBelowTarget, 'critical_days_ahead': t.criticalDaysAhead, 'consecutive_low_days': t.consecutiveLowDays, 'no_critical_issues': t.noCriticalIssues };
-  const ctxMap: Record<string, string> = { 'next_days_on_track': t.nextDaysOnTrack, 'next_days_below_target': t.nextDaysBelowTarget, 'today_on_target': t.todayOnTarget, 'requires_attention': t.requiresAttention };
   
-  let msg = msgMap[alert.message] || alert.message;
-  (alert.message_params || []).forEach((p: string, i: number) => { msg = msg.replace(`{${i}}`, p); });
-  const ctx = alert.context ? (ctxMap[alert.context] || alert.context) : '';
-
-  return (
-    <View style={styles.alertItem}>
-      <View style={styles.alertIndicators}>
-        <View style={[styles.alertDot, { backgroundColor: color(alert.today_status) }]} />
-        <View style={styles.alertDotConnector} />
-        <View style={[styles.alertDot, { backgroundColor: color(alert.future_status) }]} />
-      </View>
-      <View style={styles.alertContent}>
-        <Text style={styles.alertText}>{msg}</Text>
-        {ctx ? <Text style={styles.alertContext}>{ctx}</Text> : null}
-      </View>
-    </View>
-  );
-};
-
-// Weekly Chart
-const WeeklyChart = ({ weekData }: { weekData: any[] }) => {
-  const { t, language } = useLanguage();
-  const dayNames = getDayNames(language);
-  const barColor = (v: number) => v >= 70 ? '#10B981' : v >= 50 ? '#F59E0B' : '#EF4444';
-
-  if (!weekData || weekData.length === 0) return null;
-
-  return (
-    <View style={styles.chartCard}>
-      <Text style={styles.chartCardTitle}>{t.weeklyOccupancy}</Text>
-      <View style={styles.chartBarsRow}>
-        {weekData.slice(0, 7).map((day, i) => (
-          <View key={i} style={styles.chartBarWrapper}>
-            <View style={[styles.chartBarCol, { height: 100 }]}>
-              <View style={[styles.chartBar, { height: Math.max(4, day.occupancy_percent), backgroundColor: barColor(day.occupancy_percent) }]} />
-            </View>
-            <Text style={styles.chartBarLabel}>{dayNames[i]}</Text>
-            <Text style={styles.chartBarValue}>{day.occupancy_percent.toFixed(0)}%</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-};
-
-// Monthly Chart
-const MonthlyChart = ({ monthData, mewsData }: { monthData: any; mewsData?: any }) => {
-  const { t, language } = useLanguage();
-  const fullMonths = getFullMonthNames(language);
-  const barColor = (v: number) => v >= 70 ? '#10B981' : v >= 50 ? '#F59E0B' : '#EF4444';
-  
-  // Calculate weekly occupancy from daily data for current month
-  const today = new Date();
-  today.setHours(12, 0, 0, 0);
-  const currentMonth = today.getMonth();
-  const currentYear = today.getFullYear();
-  
-  // Get all days in current month from mewsData
-  const monthDays = mewsData?.daily?.filter((d: any) => {
-    const date = new Date(d.date);
-    return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
-  }) || [];
-  
-  // Group by week of month
-  const weeklyOcc: number[] = [0, 0, 0, 0, 0];
-  const weeklyCount: number[] = [0, 0, 0, 0, 0];
-  
-  monthDays.forEach((d: any) => {
-    const date = new Date(d.date);
-    const weekOfMonth = Math.floor((date.getDate() - 1) / 7);
-    if (weekOfMonth < 5) {
-      weeklyOcc[weekOfMonth] += d.occupancy || 0;
-      weeklyCount[weekOfMonth]++;
-    }
-  });
-  
-  const weeks = [
-    { label: 'W1', value: weeklyCount[0] > 0 ? weeklyOcc[0] / weeklyCount[0] : 0 },
-    { label: 'W2', value: weeklyCount[1] > 0 ? weeklyOcc[1] / weeklyCount[1] : 0 },
-    { label: 'W3', value: weeklyCount[2] > 0 ? weeklyOcc[2] / weeklyCount[2] : 0 },
-    { label: 'W4', value: weeklyCount[3] > 0 ? weeklyOcc[3] / weeklyCount[3] : monthData?.occupancy_accumulated || 0 },
-  ];
-
-  return (
-    <View style={styles.chartCard}>
-      <Text style={styles.chartCardTitle}>{fullMonths[currentMonth]} {t.occupancy}</Text>
-      <View style={styles.chartBarsRow}>
-        {weeks.map((w, i) => (
-          <View key={i} style={[styles.chartBarWrapper, { flex: 1 }]}>
-            <View style={[styles.chartBarCol, { height: 100 }]}>
-              <View style={[styles.chartBar, { height: Math.max(4, w.value), backgroundColor: barColor(w.value), width: 36 }]} />
-            </View>
-            <Text style={styles.chartBarLabel}>{w.label}</Text>
-            <Text style={styles.chartBarValue}>{w.value.toFixed(0)}%</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-};
-
-// Week Stats Card (Swipeable) - 5 weeks: 2 back, current, 2 forward
-const WeekStatsCard = ({ weekOffset, mewsData, settings }: { weekOffset: number; mewsData: MewsReportStore; settings: any }) => {
-  const { t, language } = useLanguage();
-  const today = new Date();
-  today.setHours(12, 0, 0, 0);
-  const weekStart = new Date(today);
-  weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7) + (weekOffset * 7));
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  
-  // Calculate ISO week number
-  const getWeekNumber = (date: Date): number => {
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-    const dayNum = d.getUTCDay() || 7;
-    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-  };
-  
-  const weekNumber = getWeekNumber(weekStart);
-
-  // Calculate week stats from Mews data
-  let totalOcc = 0, totalRev = 0, totalAdr = 0, daysWithData = 0;
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(weekStart);
-    d.setDate(weekStart.getDate() + i);
-    const dateStr = formatLocalDate(d);
-    const dayData = mewsData.daily.find(m => m.date === dateStr);
-    
-    if (dayData) {
-      totalOcc += dayData.occupancy;
-      totalRev += dayData.revenue;
-      totalAdr += dayData.adr;
-      daysWithData++;
-    }
-  }
-
-  const avgOcc = daysWithData > 0 ? totalOcc / daysWithData : 0;
-  const avgAdr = daysWithData > 0 ? totalAdr / daysWithData : 0;
-  const fmt = (v: number) => `€${v.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`;
-
-  const getWeekLabel = () => {
-    // Format: "Week 9 - Current" or "Week 10 - Next"
-    const weekLabel = `Week ${weekNumber}`;
-    if (weekOffset === 0) return `${weekLabel} - ${language === 'en' ? 'Current' : 'Huidige'}`;
-    if (weekOffset === -1) return `${weekLabel} - ${language === 'en' ? 'Last' : 'Vorige'}`;
-    if (weekOffset === -2) return `${weekLabel}`;
-    if (weekOffset === 1) return `${weekLabel} - ${language === 'en' ? 'Next' : 'Volgende'}`;
-    if (weekOffset === 2) return `${weekLabel}`;
-    return weekLabel;
-  };
-
-  const formatDateRange = () => {
-    const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
-    return `${weekStart.toLocaleDateString(language === 'en' ? 'en-GB' : 'nl-NL', opts)} - ${weekEnd.toLocaleDateString(language === 'en' ? 'en-GB' : 'nl-NL', opts)}`;
-  };
-
-  return (
-    <View style={[styles.weekMonthCard, { width: CARD_WIDTH }]}>
-      <View style={styles.controlCardHeader}>
-        <View>
-          <Text style={[styles.controlCardTitle, weekOffset === 0 && { color: '#10B981' }]}>{getWeekLabel()}</Text>
-          <Text style={styles.dateRangeText}>{formatDateRange()}</Text>
-        </View>
-      </View>
-      <View style={styles.controlStatsRow}>
-        <View style={styles.controlStat}>
-          <Text style={styles.controlStatValue}>{avgOcc.toFixed(0)}%</Text>
-          <Text style={styles.controlStatLabel}>{t.avgOccupancy}</Text>
-        </View>
-        <View style={styles.controlStatDivider} />
-        <View style={styles.controlStat}>
-          <Text style={styles.controlStatValue}>{fmt(totalRev)}</Text>
-          <Text style={styles.controlStatLabel}>{t.totalRevenue}</Text>
-        </View>
-        <View style={styles.controlStatDivider} />
-        <View style={styles.controlStat}>
-          <Text style={styles.controlStatValue}>{fmt(avgAdr)}</Text>
-          <Text style={styles.controlStatLabel}>{t.avgAdr}</Text>
-        </View>
-      </View>
-    </View>
-  );
-};
-
-// Month Stats Card (Swipeable) - 6 months: 2 back, current, 3 forward
-const MonthStatsCard = ({ monthOffset, mewsData, settings }: { monthOffset: number; mewsData: MewsReportStore; settings: any }) => {
-  const { t, language } = useLanguage();
-  const fullMonths = getFullMonthNames(language);
-  
-  const targetMonth = new Date();
-  targetMonth.setMonth(targetMonth.getMonth() + monthOffset);
-  targetMonth.setDate(1);
-  
-  const monthEnd = new Date(targetMonth);
-  monthEnd.setMonth(monthEnd.getMonth() + 1);
-  monthEnd.setDate(0);
-  
-  const daysInMonth = monthEnd.getDate();
-  const isCurrentMonth = monthOffset === 0;
-  const daysToCalc = isCurrentMonth ? new Date().getDate() : daysInMonth;
-
-  // Calculate month stats from Mews data
-  let totalOcc = 0, totalRev = 0, daysWithData = 0;
-  for (let i = 0; i < daysToCalc; i++) {
-    const d = new Date(targetMonth);
-    d.setDate(i + 1);
-    const dateStr = d.toISOString().split('T')[0];
-    const dayData = mewsData.daily.find(m => m.date === dateStr);
-    
-    if (dayData) {
-      totalOcc += dayData.occupancy;
-      totalRev += dayData.revenue;
-      daysWithData++;
-    }
-  }
-
-  const avgOcc = daysWithData > 0 ? totalOcc / daysWithData : 0;
-  const fmt = (v: number) => `€${v.toLocaleString('nl-NL', { maximumFractionDigits: 0 })}`;
-
-  return (
-    <View style={[styles.weekMonthCard, { width: CARD_WIDTH }]}>
-      <View style={styles.controlCardHeader}>
-        <Text style={[styles.controlCardTitle, isCurrentMonth && { color: '#10B981' }]}>
-          {fullMonths[targetMonth.getMonth()]} {targetMonth.getFullYear()}
-        </Text>
-        <Text style={styles.monthProgress}>
-          {isCurrentMonth ? `${t.day} ${daysToCalc} ${t.of} ${daysInMonth}` : `${daysInMonth} ${language === 'en' ? 'days' : 'dagen'}`}
-        </Text>
-      </View>
-      <View style={styles.controlStatsRow}>
-        <View style={styles.controlStat}>
-          <Text style={styles.controlStatValue}>{avgOcc.toFixed(0)}%</Text>
-          <Text style={styles.controlStatLabel}>{isCurrentMonth ? t.accumulatedOccupancy : t.avgOccupancy}</Text>
-        </View>
-        <View style={styles.controlStatDivider} />
-        <View style={styles.controlStat}>
-          <Text style={styles.controlStatValue}>{fmt(totalRev)}</Text>
-          <Text style={styles.controlStatLabel}>{isCurrentMonth ? t.accumulatedRevenue : t.totalRevenue}</Text>
-        </View>
-      </View>
-      {isCurrentMonth && (
-        <View style={styles.projectionBox}>
-          <Ionicons name="analytics-outline" size={14} color="#9CA3AF" />
-          <Text style={styles.projectionText}>{t.projectionMessage} {avgOcc.toFixed(0)}%</Text>
-        </View>
-      )}
-    </View>
-  );
-};
-
-export default function Dashboard() {
-  const [data, setData] = useState<DashboardData | null>(null);
+  // State
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [weekChartData, setWeekChartData] = useState<any[]>([]);
-  const [dayStatsArray, setDayStatsArray] = useState<DailyStats[]>([]);
-  const [mewsDataState, setMewsDataState] = useState<MewsReportStore>({ lastUpdate: '', daily: [], weekly: [], monthly: [] });
-  const [settings, setSettingsState] = useState(DEFAULT_SETTINGS);
+  const [data, setData] = useState<HotelDataStore | null>(null);
+  const [settings, setSettings] = useState<HotelSettings>(DEFAULT_SETTINGS);
+  const [tooltipVisible, setTooltipVisible] = useState<string | null>(null);
   
-  // Swipe indices
-  const [currentDayIndex, setCurrentDayIndex] = useState(2);
-  const [currentChartIndex, setCurrentChartIndex] = useState(0);
-  const [currentWeekIndex, setCurrentWeekIndex] = useState(2); // Start at current week (index 2)
-  const [currentMonthIndex, setCurrentMonthIndex] = useState(2); // Start at current month (index 2)
+  // Derived data
+  const [todayData, setTodayData] = useState<TodayData | null>(null);
+  const [radarDays, setRadarDays] = useState<DailyData[]>([]);
+  const [weeklyRange, setWeeklyRange] = useState<WeeklyData[]>([]);
+  const [monthlyRange, setMonthlyRange] = useState<MonthlyData[]>([]);
+  const [currentMonthWeeks, setCurrentMonthWeeks] = useState<WeeklyData[]>([]);
   
-  const router = useRouter();
-  const { t, language } = useLanguage();
-  
-  const dayScrollRef = useRef<ScrollView>(null);
-  const chartScrollRef = useRef<ScrollView>(null);
-  const weekScrollRef = useRef<ScrollView>(null);
-  const monthScrollRef = useRef<ScrollView>(null);
-
-  // Generate day labels with actual dates
-  const generateDayLabels = () => {
-    const today = new Date();
-    today.setHours(12, 0, 0, 0);
-    const labels: string[] = [];
-    
-    for (let i = -2; i <= 2; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
-      const day = String(d.getDate()).padStart(2, '0');
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const year = d.getFullYear();
-      labels.push(`${day}/${month}/${year}`);
-    }
-    return labels;
-  };
-  
-  const dayLabels = generateDayLabels();
-
-  // Week offsets: -2, -1, 0, 1, 2
-  const weekOffsets = [-2, -1, 0, 1, 2];
-  // Month offsets: -2, -1, 0, 1, 2, 3
-  const monthOffsets = [-2, -1, 0, 1, 2, 3];
-
-  const loadDashboard = useCallback(async () => {
+  // Load data
+  const loadData = useCallback(async () => {
     try {
-      const loadedSettings = await loadSettings();
-      setSettingsState(loadedSettings);
+      const [hotelData, loadedSettings] = await Promise.all([
+        loadHotelData(),
+        loadSettings(),
+      ]);
       
-      // Load Mews data instead of old reservations
-      const mewsData = await loadMewsData();
-      const lastUpdate = await getLastUpdate();
+      setData(hotelData);
+      setSettings(loadedSettings);
       
-      console.log('Loaded Mews data:', { 
-        daily: mewsData.daily.length, 
-        weekly: mewsData.weekly.length, 
-        monthly: mewsData.monthly.length 
+      console.log('[Manager] Data loaded:', {
+        daily: hotelData.daily.length,
+        weekly: hotelData.weekly.length,
+        monthly: hotelData.monthly.length,
       });
       
-      // Determine TOTAL_ROOMS from the data file
-      let TOTAL_ROOMS = loadedSettings.total_rooms;
-      if (mewsData.daily.length > 0 && mewsData.daily[0].availableRooms > 0) {
-        TOTAL_ROOMS = mewsData.daily[0].availableRooms;
-        console.log('Using total rooms from file:', TOTAL_ROOMS);
-      }
+      // Process data
+      processData(hotelData);
       
-      // Convert Mews data to dashboard format
-      const hasMewsData = mewsData.daily.length > 0 || mewsData.weekly.length > 0 || mewsData.monthly.length > 0;
-      
-      if (hasMewsData) {
-        // Use real Mews data
-        const dashboardData = buildDashboardFromMews(mewsData, loadedSettings, lastUpdate);
-        setData(dashboardData);
-        
-        // Combine ALL data sources for lookup
-        const allData = [...mewsData.daily, ...mewsData.weekly, ...mewsData.monthly];
-        
-        // Calculate averages from all available data
-        let totalOcc = 0, totalRev = 0, totalAdr = 0, dataCount = 0;
-        for (const d of allData) {
-          if (d.occupancy > 0) {
-            totalOcc += d.occupancy;
-            totalRev += d.revenue;
-            totalAdr += d.adr;
-            dataCount++;
-          }
-        }
-        
-        const avgOcc = dataCount > 0 ? totalOcc / dataCount : 0;
-        const avgRev = dataCount > 0 ? totalRev / dataCount : 0;
-        const avgAdr = dataCount > 0 ? totalAdr / dataCount : 0;
-        
-        // Day stats using all data or averages
-        // Use local date format to avoid timezone issues
-        const today = new Date();
-        today.setHours(12, 0, 0, 0); // Set to noon to avoid timezone edge cases
-        const dayStats: DailyStats[] = [];
-        
-        const todayStr = formatLocalDate(today);
-        console.log('Building dayStats for today:', todayStr, '(local timezone)');
-        console.log('Mews arrivals data:', mewsData.arrivals);
-        console.log('Mews departures data:', mewsData.departures);
-        
-        for (let i = -2; i <= 2; i++) {
-          const d = new Date(today);
-          d.setDate(today.getDate() + i);
-          const dateStr = formatLocalDate(d);
-          
-          // First try to find in DAILY data (has arrivals/departures)
-          let mewsDay = mewsData.daily.find(m => m.date === dateStr);
-          
-          // If no exact match in daily, try weekly data by day of week
-          if (!mewsDay && mewsData.weekly.length > 0) {
-            mewsDay = mewsData.weekly.find(w => {
-              const wDate = new Date(w.date);
-              return wDate.getDay() === d.getDay();
-            });
-          }
-          
-          // Get arrivals/departures - check BOTH sources
-          const arrFromList = mewsData.arrivals?.find(a => a.date === dateStr)?.count || 0;
-          const depFromList = mewsData.departures?.find(dp => dp.date === dateStr)?.count || 0;
-          const arrFromDay = mewsDay?.arrivals || 0;
-          const depFromDay = mewsDay?.departures || 0;
-          
-          // Use whichever is greater (in case one source has data the other doesn't)
-          const arrivals = Math.max(arrFromList, arrFromDay);
-          const departures = Math.max(depFromList, depFromDay);
-          
-          // Get total rooms from the day's data or use the global TOTAL_ROOMS
-          const dayTotalRooms = mewsDay?.availableRooms || TOTAL_ROOMS;
-          
-          console.log(`Day ${dateStr} (i=${i}): arrivals=${arrivals} (list:${arrFromList}, day:${arrFromDay}), departures=${departures} (list:${depFromList}, day:${depFromDay}), occupied=${mewsDay?.occupiedRooms || 0}`);
-          
-          // Use data if found, otherwise use averages
-          dayStats.push({
-            date: d,
-            occupancy_percent: mewsDay?.occupancy || avgOcc,
-            rooms_occupied: mewsDay?.occupiedRooms || Math.round((avgOcc / 100) * dayTotalRooms),
-            total_rooms: dayTotalRooms,
-            arrivals: arrivals,
-            departures: departures,
-            room_revenue: mewsDay?.revenue || avgRev,
-            parking_revenue: mewsDay?.parkingRevenue || 0,
-            vending_revenue: 0,
-            city_tax: mewsDay?.touristTax || 0,
-            adr: mewsDay?.adr || avgAdr,
-          });
-        }
-        setDayStatsArray(dayStats);
-        console.log('dayStatsArray set with', dayStats.length, 'items');
-        
-        // Weekly chart data - calculate from DAILY data for current week
-        const weekStats: { occupancy_percent: number }[] = [];
-        const chartWeekStart = new Date(today);
-        chartWeekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7)); // Monday of current week
-        
-        for (let i = 0; i < 7; i++) {
-          const d = new Date(chartWeekStart);
-          d.setDate(chartWeekStart.getDate() + i);
-          const dateStr = formatLocalDate(d);
-          const dayData = mewsData.daily.find(m => m.date === dateStr);
-          
-          if (dayData) {
-            weekStats.push({ occupancy_percent: dayData.occupancy || 0 });
-          } else {
-            weekStats.push({ occupancy_percent: 0 });
-          }
-        }
-        
-        console.log('Week chart data:', weekStats.map((s, i) => `Day${i}: ${s.occupancy_percent}%`).join(', '));
-        setWeekChartData(weekStats);
-        
-        // Store mews data for week/month cards
-        setMewsDataState(mewsData);
-        
-      } else {
-        // No Mews data - show empty state with message
-        const today = new Date();
-        const weekStart = new Date(today);
-        weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 6);
-        const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        
-        const emptyData: DashboardData = {
-          status: 'yellow',
-          status_reason: null,
-          status_reason_params: [],
-          rhythm: 'stable',
-          trend: 'stable',
-          last_update: lastUpdate,
-          today: {
-            date: today,
-            occupancy_percent: 0,
-            rooms_occupied: 0,
-            total_rooms: loadedSettings.total_rooms,
-            arrivals: 0,
-            departures: 0,
-            room_revenue: 0,
-            parking_revenue: 0,
-            vending_revenue: 0,
-            city_tax: 0,
-            adr: 0,
-          },
-          radar: [],
-          alerts: [{
-            message: 'no_data_uploaded',
-            message_params: [],
-            today_status: 'warning',
-            future_status: 'warning',
-            context: 'upload_xlsx_files',
-          }],
-          week: { 
-            start: weekStart, 
-            end: weekEnd, 
-            occupancy_avg: 0, 
-            revenue_total: 0, 
-            adr_avg: 0,
-            trend: 'stable',
-          },
-          month: { 
-            name: monthNames[today.getMonth()],
-            occupancy_accumulated: 0, 
-            revenue_accumulated: 0, 
-            projected_occupancy: 0,
-            days_elapsed: today.getDate(), 
-            days_total: monthEnd.getDate() 
-          },
-        };
-        setData(emptyData);
-        setDayStatsArray(Array(5).fill({
-          date: today,
-          occupancy_percent: 0,
-          rooms_occupied: 0,
-          total_rooms: loadedSettings.total_rooms,
-          arrivals: 0,
-          departures: 0,
-          room_revenue: 0,
-          parking_revenue: 0,
-          vending_revenue: 0,
-          city_tax: 0,
-          adr: 0,
-        }));
-        setWeekChartData(Array(7).fill({ occupancy_percent: 0 }));
-        setMewsDataState({ lastUpdate: '', daily: [], weekly: [], monthly: [], arrivals: [], departures: [] });
-      }
-      
-    } catch (err) {
-      console.error('Error loading dashboard:', err);
+    } catch (error) {
+      console.error('[Manager] Load error:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
-
-  useEffect(() => { loadDashboard(); }, [loadDashboard]);
   
-  // Scroll to current items on mount
+  // Process data according to contract
+  const processData = (hotelData: HotelDataStore) => {
+    const { daily, weekly, monthly } = hotelData;
+    
+    // =====================
+    // TODAY'S DATA (from 2026_Values)
+    // =====================
+    const todayKey = getTodayDateKey(); // DD-MM-YYYY
+    const todayISO = getTodayISO();     // YYYY-MM-DD
+    
+    console.log('[Manager] Looking for today:', todayKey, 'or', todayISO);
+    
+    // Find today in daily data (try both formats)
+    let todayRecord = daily.find(d => d.date === todayKey);
+    if (!todayRecord) {
+      todayRecord = daily.find(d => d.dateISO === todayISO);
+    }
+    
+    if (todayRecord) {
+      console.log('[Manager] Found today:', todayRecord);
+      setTodayData({
+        date: todayRecord.date,
+        occupancy: todayRecord.occupancy,
+        occupied: todayRecord.occupied,
+        available: todayRecord.available,
+        totalRevenue: todayRecord.totalRevenue,
+        arrivals: todayRecord.arrivals,
+        departures: todayRecord.departures,
+      });
+    } else {
+      console.log('[Manager] Today not found in data');
+      setTodayData(null);
+    }
+    
+    // =====================
+    // RADAR 15 DAYS (from 2026_Values)
+    // Today + 14 days = 15 total
+    // =====================
+    const todayDate = new Date();
+    const radar: DailyData[] = [];
+    
+    for (let i = 0; i < 15; i++) {
+      const date = new Date(todayDate);
+      date.setDate(todayDate.getDate() + i);
+      
+      // Format as DD-MM-YYYY
+      const d = String(date.getDate()).padStart(2, '0');
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const y = date.getFullYear();
+      const dateKey = `${d}-${m}-${y}`;
+      const dateISO = `${y}-${m}-${d}`;
+      
+      // Find in daily data
+      let dayData = daily.find(x => x.date === dateKey);
+      if (!dayData) {
+        dayData = daily.find(x => x.dateISO === dateISO);
+      }
+      
+      if (dayData) {
+        radar.push(dayData);
+      }
+    }
+    
+    setRadarDays(radar);
+    console.log('[Manager] Radar days:', radar.length);
+    
+    // =====================
+    // WEEKLY STATS: 2 back + 24 forward = 27 weeks
+    // =====================
+    const currentWeek = getCurrentWeekISO();
+    const weekNum = parseInt(currentWeek.split('-W')[1], 10);
+    
+    const weekStart = Math.max(1, weekNum - 2);
+    const weekEnd = Math.min(53, weekNum + 24);
+    
+    const weeklyFiltered = weekly.filter(w => {
+      const wNum = parseInt(w.isoWeek.split('-W')[1], 10);
+      return wNum >= weekStart && wNum <= weekEnd;
+    });
+    
+    setWeeklyRange(weeklyFiltered);
+    console.log('[Manager] Weekly range:', weeklyFiltered.length, 'weeks');
+    
+    // =====================
+    // MONTHLY STATS: 2 back + 6 forward = 9 months
+    // =====================
+    const currentMonth = getCurrentMonthIndex(); // 0-11
+    
+    const monthStart = Math.max(0, currentMonth - 2);
+    const monthEnd = Math.min(11, currentMonth + 6);
+    
+    const monthlyFiltered = monthly.filter(m => {
+      return m.monthIndex >= monthStart && m.monthIndex <= monthEnd;
+    });
+    
+    setMonthlyRange(monthlyFiltered);
+    console.log('[Manager] Monthly range:', monthlyFiltered.length, 'months');
+    
+    // =====================
+    // CURRENT MONTH WEEKS (for W1-W4 chart)
+    // =====================
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                       'July', 'August', 'September', 'October', 'November', 'December'];
+    const currentMonthName = monthNames[currentMonth];
+    
+    // Find weeks that overlap with current month
+    const monthWeeks = weekly.filter(w => {
+      if (!w.weekStart) return false;
+      const startDate = new Date(w.weekStart);
+      const endDate = new Date(w.weekEnd);
+      const monthFirst = new Date(2026, currentMonth, 1);
+      const monthLast = new Date(2026, currentMonth + 1, 0);
+      return startDate <= monthLast && endDate >= monthFirst;
+    }).slice(0, 4); // Max 4 weeks
+    
+    setCurrentMonthWeeks(monthWeeks);
+    console.log('[Manager] Month weeks:', monthWeeks.length);
+  };
+  
+  // Initial load
   useEffect(() => {
-    setTimeout(() => {
-      dayScrollRef.current?.scrollTo({ x: 2 * CARD_WIDTH, animated: false });
-      weekScrollRef.current?.scrollTo({ x: 2 * CARD_WIDTH, animated: false });
-      monthScrollRef.current?.scrollTo({ x: 2 * CARD_WIDTH, animated: false });
-    }, 100);
-  }, [dayStatsArray]);
-
-  const onRefresh = useCallback(() => { setRefreshing(true); loadDashboard(); }, [loadDashboard]);
-
-  const handleScroll = (setter: (i: number) => void) => (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    setter(Math.round(e.nativeEvent.contentOffset.x / CARD_WIDTH));
+    loadData();
+  }, [loadData]);
+  
+  // Refresh
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadData();
+  }, [loadData]);
+  
+  // Show tooltip
+  const showTooltip = (key: string) => {
+    setTooltipVisible(key);
   };
-
-  const formatDate = (s: string | null) => {
-    if (!s) return t.never;
-    const d = new Date(s);
-    return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  };
-
+  
+  // Render help icon
+  const HelpIcon = ({ tooltipKey }: { tooltipKey: string }) => (
+    <TouchableOpacity 
+      onPress={() => showTooltip(tooltipKey)}
+      style={styles.helpIcon}
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+    >
+      <Ionicons name="help-circle-outline" size={18} color="#666" />
+    </TouchableOpacity>
+  );
+  
+  // Loading state
   if (loading) {
-    return <View style={styles.loadingContainer}><StatusBar style="light" /><ActivityIndicator size="large" color="#10B981" /><Text style={styles.loadingText}>Loading...</Text></View>;
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="dark" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#1a365d" />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
   }
-
+  
+  // Status
+  const isRisk = todayData ? todayData.occupancy < settings.low_season_target : false;
+  const statusColor = isRisk ? '#C53030' : '#38A169';
+  const statusText = isRisk ? 'Risk' : 'Stable';
+  
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View style={styles.brandContainer}>
-            <HotelLogo size={36} />
-            <View style={styles.brandTextContainer}>
-              <Text style={styles.brandName}>BadHotel</Text>
-              <Text style={styles.brandLocation}>Noordwijk</Text>
-            </View>
-          </View>
-          <View style={styles.headerRight}>
-            <LanguageToggle />
-            <TouchableOpacity style={styles.adminButton} onPress={() => router.push('/admin')}>
-              <Ionicons name="settings-outline" size={20} color="#9CA3AF" />
-            </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#1a365d" />
+        </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Manager Mode</Text>
+          <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
+            <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+            <Text style={[styles.statusText, { color: statusColor }]}>{statusText}</Text>
           </View>
         </View>
-        <View style={styles.statusRow}>
-          <StatusBadge status={data?.status || 'green'} reason={data?.status_reason} reasonParams={data?.status_reason_params} />
-          <TrendIndicator trend={data?.trend || 'stable'} />
-          <RealTimeClock />
-        </View>
-        <Text style={styles.lastUpdate}>{t.lastUpdate}: {formatDate(data?.last_update || null)}</Text>
+        <TouchableOpacity onPress={() => router.push('/admin')} style={styles.adminButton}>
+          <Ionicons name="settings-outline" size={24} color="#1a365d" />
+        </TouchableOpacity>
       </View>
-
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#10B981" />}>
-        
-        {/* OPERATION - Today Only */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="calendar" size={20} color="#10B981" />
-            <Text style={styles.sectionTitle}>{t.operation.toUpperCase()}</Text>
+      
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ===================== */}
+        {/* OPERATION CARD */}
+        {/* ===================== */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Operation</Text>
+            <HelpIcon tooltipKey="operation" />
           </View>
-          <View style={{ paddingHorizontal: 16 }}>
-            {dayStatsArray.length > 0 && dayStatsArray[2] ? (
-              <DayCard dayStats={dayStatsArray[2]} dayLabel={dayLabels[2]} isToday={true} />
-            ) : (
-              <View style={[styles.dayCard, { width: CARD_WIDTH }]}>
-                <ActivityIndicator color="#10B981" style={{ marginTop: 60 }} />
+          
+          {todayData ? (
+            <View style={styles.operationGrid}>
+              <View style={styles.operationItem}>
+                <Text style={styles.operationLabel}>Occupancy Today</Text>
+                <Text style={styles.operationValue}>{todayData.occupancy.toFixed(1)}%</Text>
               </View>
-            )}
-          </View>
-        </View>
-
-        {/* RADAR */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="radio" size={20} color="#F59E0B" />
-            <Text style={styles.sectionTitle}>{t.radar}</Text>
-            <Text style={styles.sectionSubtitle}>{t.next14Days}</Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}>
-            {data?.radar.map((day, i) => <RadarDayCard key={i} day={day} index={i} />)}
-          </ScrollView>
-          <View style={styles.alertsBox}>
-            <View style={styles.alertsHeader}>
-              <Ionicons name="alert-circle" size={18} color="#F59E0B" />
-              <Text style={styles.alertsTitle}>{t.whatNeedsAttention}</Text>
+              <View style={styles.operationItem}>
+                <Text style={styles.operationLabel}>Rooms Sold</Text>
+                <Text style={styles.operationValue}>{todayData.occupied} / {todayData.available}</Text>
+              </View>
+              <View style={styles.operationItem}>
+                <Text style={styles.operationLabel}>Total Revenue</Text>
+                <Text style={styles.operationValue}>€{todayData.totalRevenue.toFixed(2)}</Text>
+              </View>
+              <View style={styles.operationItem}>
+                <Text style={styles.operationLabel}>Arrivals / Departures</Text>
+                <Text style={styles.operationValue}>{todayData.arrivals} / {todayData.departures}</Text>
+              </View>
             </View>
-            <View style={styles.alertLegend}>
-              <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: '#6B7280' }]} /><Text style={styles.legendText}>{t.todayLabel}</Text></View>
-              <View style={styles.legendItem}><View style={[styles.legendDot, { backgroundColor: '#6B7280' }]} /><Text style={styles.legendText}>{t.nextDays}</Text></View>
+          ) : (
+            <View style={styles.noData}>
+              <Text style={styles.noDataText}>Data unavailable</Text>
+              <Text style={styles.noDataSub}>No data for today ({getTodayDateKey()})</Text>
             </View>
-            {data?.alerts.map((a, i) => <AlertItem key={i} alert={a} />)}
-          </View>
+          )}
         </View>
-
-        {/* CONTROL */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="analytics" size={20} color="#60A5FA" />
-            <Text style={styles.sectionTitle}>{t.control}</Text>
-            <Text style={styles.swipeHint}>← {language === 'en' ? 'swipe' : 'veeg'} →</Text>
+        
+        {/* ===================== */}
+        {/* WHAT NEEDS ATTENTION */}
+        {/* ===================== */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>What Needs Attention</Text>
+            <HelpIcon tooltipKey="attention" />
           </View>
-
-          {/* Charts Swipeable */}
-          <ScrollView ref={chartScrollRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={handleScroll(setCurrentChartIndex)} snapToInterval={CARD_WIDTH} decelerationRate="fast" contentContainerStyle={{ paddingHorizontal: 16 }}>
-            <View style={{ width: CARD_WIDTH }}><WeeklyChart weekData={weekChartData} /></View>
-            <View style={{ width: CARD_WIDTH }}><MonthlyChart monthData={data?.month} mewsData={mewsDataState} /></View>
-          </ScrollView>
-          <PaginationDots total={2} current={currentChartIndex} />
-
-          {/* Week Stats Swipeable */}
-          <Text style={styles.subSectionTitle}>{language === 'en' ? 'Weekly Stats' : 'Weekstatistieken'}</Text>
-          <ScrollView ref={weekScrollRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={handleScroll(setCurrentWeekIndex)} snapToInterval={CARD_WIDTH} decelerationRate="fast" contentContainerStyle={{ paddingHorizontal: 16 }}>
-            {weekOffsets.map((offset, i) => <WeekStatsCard key={i} weekOffset={offset} mewsData={mewsDataState} settings={settings} />)}
-          </ScrollView>
-          <PaginationDots total={5} current={currentWeekIndex} />
-
-          {/* Month Stats Swipeable */}
-          <Text style={styles.subSectionTitle}>{language === 'en' ? 'Monthly Stats' : 'Maandstatistieken'}</Text>
-          <ScrollView ref={monthScrollRef} horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={handleScroll(setCurrentMonthIndex)} snapToInterval={CARD_WIDTH} decelerationRate="fast" contentContainerStyle={{ paddingHorizontal: 16 }}>
-            {monthOffsets.map((offset, i) => <MonthStatsCard key={i} monthOffset={offset} mewsData={mewsDataState} settings={settings} />)}
-          </ScrollView>
-          <PaginationDots total={6} current={currentMonthIndex} />
+          
+          {todayData && todayData.occupancy < settings.low_season_target ? (
+            <View style={styles.alertItem}>
+              <View style={styles.alertIcon}>
+                <Ionicons name="warning" size={20} color="#C53030" />
+              </View>
+              <View style={styles.alertContent}>
+                <Text style={styles.alertTitle}>Requires immediate attention</Text>
+                <Text style={styles.alertDesc}>
+                  Today's occupancy ({todayData.occupancy.toFixed(1)}%) is below target ({settings.low_season_target}%)
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.alertItem}>
+              <View style={[styles.alertIcon, { backgroundColor: '#38A16920' }]}>
+                <Ionicons name="checkmark-circle" size={20} color="#38A169" />
+              </View>
+              <View style={styles.alertContent}>
+                <Text style={[styles.alertTitle, { color: '#38A169' }]}>All metrics on target</Text>
+                <Text style={styles.alertDesc}>No issues require attention</Text>
+              </View>
+            </View>
+          )}
         </View>
-
+        
+        {/* ===================== */}
+        {/* RADAR 15 DAYS */}
+        {/* ===================== */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Radar 15 Days</Text>
+            <HelpIcon tooltipKey="radar" />
+          </View>
+          
+          {radarDays.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.radarScroll}>
+              {radarDays.map((day, idx) => (
+                <View key={idx} style={styles.radarDay}>
+                  <Text style={styles.radarDate}>{day.date.split('-')[0]}/{day.date.split('-')[1]}</Text>
+                  <Text style={styles.radarOcc}>{day.occupancy.toFixed(0)}%</Text>
+                  <Text style={styles.radarRooms}>{day.occupied}r</Text>
+                  <Text style={styles.radarRev}>€{day.totalRevenue.toFixed(0)}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={styles.noDataText}>No radar data available</Text>
+          )}
+        </View>
+        
+        {/* ===================== */}
+        {/* CONTROL SECTION */}
+        {/* ===================== */}
+        <Text style={styles.sectionTitle}>Control</Text>
+        
+        {/* Current Month Occupancy W1-W4 */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>
+              {['January', 'February', 'March', 'April', 'May', 'June',
+                'July', 'August', 'September', 'October', 'November', 'December'][getCurrentMonthIndex()]} Occupancy
+            </Text>
+            <HelpIcon tooltipKey="monthlyOccupancy" />
+          </View>
+          
+          {currentMonthWeeks.length > 0 ? (
+            <View style={styles.weekBars}>
+              {currentMonthWeeks.map((week, idx) => (
+                <View key={idx} style={styles.weekBarItem}>
+                  <Text style={styles.weekBarLabel}>W{idx + 1}</Text>
+                  <View style={styles.weekBarBg}>
+                    <View 
+                      style={[styles.weekBarFill, { height: `${Math.min(week.occupancy, 100)}%` }]} 
+                    />
+                  </View>
+                  <Text style={styles.weekBarValue}>{week.occupancy.toFixed(0)}%</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.noDataText}>No weekly data for current month</Text>
+          )}
+        </View>
+        
+        {/* Weekly Stats (2 back + 24 forward) */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Weekly Stats</Text>
+            <HelpIcon tooltipKey="weeklyStats" />
+          </View>
+          
+          {weeklyRange.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {weeklyRange.map((week, idx) => (
+                <View key={idx} style={styles.statsCard}>
+                  <Text style={styles.statsWeek}>{week.isoWeek}</Text>
+                  <Text style={styles.statsLabel}>Occupancy</Text>
+                  <Text style={styles.statsValue}>{week.occupancy.toFixed(1)}%</Text>
+                  <Text style={styles.statsLabel}>Revenue</Text>
+                  <Text style={styles.statsValue}>€{week.totalRevenue.toFixed(0)}</Text>
+                  <Text style={styles.statsLabel}>ADR</Text>
+                  <Text style={styles.statsValue}>€{week.adr.toFixed(0)}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={styles.noDataText}>No weekly data available</Text>
+          )}
+        </View>
+        
+        {/* Monthly Stats (2 back + 6 forward) */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Monthly Stats</Text>
+            <HelpIcon tooltipKey="monthlyStats" />
+          </View>
+          
+          {monthlyRange.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {monthlyRange.map((month, idx) => (
+                <View key={idx} style={styles.statsCard}>
+                  <Text style={styles.statsWeek}>{month.month.substring(0, 3)}</Text>
+                  <Text style={styles.statsLabel}>Occupancy</Text>
+                  <Text style={styles.statsValue}>{month.occupancy.toFixed(1)}%</Text>
+                  <Text style={styles.statsLabel}>Revenue</Text>
+                  <Text style={styles.statsValue}>€{month.totalRevenue.toFixed(0)}</Text>
+                  <Text style={styles.statsLabel}>ADR</Text>
+                  <Text style={styles.statsValue}>€{month.adr.toFixed(0)}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={styles.noDataText}>No monthly data available</Text>
+          )}
+        </View>
+        
         <View style={styles.footerSpacer} />
       </ScrollView>
+      
+      {/* Tooltip Modal */}
+      <Modal
+        visible={tooltipVisible !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTooltipVisible(null)}
+      >
+        <TouchableOpacity 
+          style={styles.tooltipOverlay} 
+          activeOpacity={1}
+          onPress={() => setTooltipVisible(null)}
+        >
+          <View style={styles.tooltipBox}>
+            <Text style={styles.tooltipText}>
+              {tooltipVisible ? TOOLTIPS[tooltipVisible as keyof typeof TOOLTIPS] : ''}
+            </Text>
+            <TouchableOpacity 
+              style={styles.tooltipClose}
+              onPress={() => setTooltipVisible(null)}
+            >
+              <Text style={styles.tooltipCloseText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
 
+// ============================================
+// STYLES
+// ============================================
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0A0A0B' },
-  loadingContainer: { flex: 1, backgroundColor: '#0A0A0B', justifyContent: 'center', alignItems: 'center' },
-  loadingText: { color: '#9CA3AF', marginTop: 16, fontSize: 14 },
-  header: { backgroundColor: '#111113', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1F1F23' },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  brandContainer: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  brandTextContainer: { flexDirection: 'column' },
-  brandName: { fontSize: 18, fontWeight: '700', color: '#FFFFFF', letterSpacing: -0.5 },
-  brandLocation: { fontSize: 11, color: '#8FAFC4', marginTop: -2 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  adminButton: { padding: 8, borderRadius: 8, backgroundColor: '#1F1F23' },
-  langToggle: { flexDirection: 'row', backgroundColor: '#1F1F23', borderRadius: 6, overflow: 'hidden' },
-  langBtn: { paddingHorizontal: 10, paddingVertical: 6 },
-  langBtnActive: { backgroundColor: '#10B981' },
-  langBtnText: { fontSize: 11, fontWeight: '600', color: '#6B7280' },
-  langBtnTextActive: { color: '#FFFFFF' },
-  statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 },
-  statusContainer: { flexDirection: 'column', gap: 2 },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, gap: 6 },
-  statusText: { fontSize: 12, fontWeight: '600' },
-  statusReason: { fontSize: 10, marginTop: 2, marginLeft: 4 },
-  trendContainer: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  trendArrow: { fontSize: 16, fontWeight: '700' },
-  trendText: { fontSize: 11, fontWeight: '500' },
-  clockText: { fontSize: 14, fontWeight: '600', color: '#FFFFFF', fontVariant: ['tabular-nums'] },
-  lastUpdate: { fontSize: 11, color: '#6B7280', marginTop: 8 },
-  scrollView: { flex: 1 },
-  scrollContent: { paddingBottom: 40 },
-  section: { paddingVertical: 20, borderBottomWidth: 1, borderBottomColor: '#1F1F23' },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, paddingHorizontal: 16, gap: 8 },
-  sectionTitle: { fontSize: 14, fontWeight: '700', color: '#FFFFFF', letterSpacing: 1 },
-  sectionSubtitle: { fontSize: 12, color: '#6B7280', marginLeft: 'auto' },
-  swipeHint: { fontSize: 11, color: '#6B7280', marginLeft: 'auto' },
-  subSectionTitle: { fontSize: 12, fontWeight: '600', color: '#9CA3AF', paddingHorizontal: 16, marginTop: 20, marginBottom: 12 },
-  paginationContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 12, gap: 6 },
-  paginationDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#374151' },
-  paginationDotActive: { backgroundColor: '#10B981', width: 20 },
-  dayCard: { backgroundColor: '#111113', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#1F1F23' },
-  dayCardLabel: { fontSize: 16, fontWeight: '600', color: '#6B7280', marginBottom: 16, textAlign: 'center' },
-  dayCardLabelToday: { color: '#10B981' },
-  dayCardGrid: { flexDirection: 'row', marginBottom: 16 },
-  dayCardOccupancy: { flex: 1, alignItems: 'center', borderRightWidth: 1, borderRightColor: '#1F1F23', paddingRight: 16 },
-  dayCardOccLabel: { fontSize: 11, color: '#6B7280', marginBottom: 4 },
-  dayCardOccValue: { fontSize: 48, fontWeight: '700', color: '#10B981' },
-  dayCardOccRooms: { fontSize: 12, color: '#9CA3AF', marginTop: 4 },
-  dayCardArrDep: { flex: 1, flexDirection: 'row', paddingLeft: 16 },
-  dayCardArrDepItem: { flex: 1, alignItems: 'center' },
-  dayCardDivider: { width: 1, backgroundColor: '#1F1F23' },
-  dayCardArrDepValue: { fontSize: 28, fontWeight: '700', color: '#FFFFFF', marginTop: 4 },
-  dayCardArrDepLabel: { fontSize: 10, color: '#6B7280', marginTop: 2 },
-  dayCardRevenue: { backgroundColor: '#0A0A0B', borderRadius: 12, padding: 12, marginTop: 8 },
-  dayCardRevTitle: { fontSize: 11, color: '#6B7280', marginBottom: 10, textAlign: 'center' },
-  dayCardRevGrid: { flexDirection: 'row', justifyContent: 'space-around' },
-  dayCardRevItem: { alignItems: 'center' },
-  dayCardRevValue: { fontSize: 14, fontWeight: '600', color: '#FFFFFF', marginTop: 4 },
-  dayCardTax: { fontSize: 10, color: '#6B7280', textAlign: 'center', marginTop: 10 },
-  radarCard: { backgroundColor: '#111113', borderRadius: 10, padding: 12, width: 90, borderWidth: 1, borderColor: '#1F1F23' },
-  radarCardFirst: { backgroundColor: '#1A1A1D' },
-  radarDateContainer: { alignItems: 'center', marginBottom: 8, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#1F1F23' },
-  radarDayName: { fontSize: 10, color: '#6B7280', textTransform: 'uppercase' },
-  radarDayNum: { fontSize: 20, fontWeight: '700', color: '#FFFFFF', marginVertical: 2 },
-  radarMonth: { fontSize: 9, color: '#6B7280' },
-  radarStatsContainer: { alignItems: 'center', gap: 4 },
-  radarOccupancyValue: { fontSize: 18, fontWeight: '700' },
-  radarRoomsValue: { fontSize: 11, color: '#9CA3AF' },
-  radarAdrValue: { fontSize: 10, color: '#60A5FA' },
-  alertsBox: { backgroundColor: '#111113', borderRadius: 12, padding: 16, marginTop: 16, marginHorizontal: 16, borderWidth: 1, borderColor: '#1F1F23' },
-  alertsHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
-  alertsTitle: { fontSize: 13, fontWeight: '600', color: '#FFFFFF' },
-  alertLegend: { flexDirection: 'row', gap: 16, marginBottom: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#1F1F23' },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  legendDot: { width: 6, height: 6, borderRadius: 3 },
-  legendText: { fontSize: 10, color: '#6B7280' },
-  alertItem: { flexDirection: 'row', marginVertical: 8, gap: 12 },
-  alertIndicators: { alignItems: 'center', width: 20 },
-  alertDot: { width: 8, height: 8, borderRadius: 4 },
-  alertDotConnector: { width: 1, height: 8, backgroundColor: '#374151', marginVertical: 2 },
-  alertContent: { flex: 1 },
-  alertText: { fontSize: 13, color: '#D1D5DB', lineHeight: 18 },
-  alertContext: { fontSize: 11, color: '#6B7280', marginTop: 2, fontStyle: 'italic' },
-  chartCard: { backgroundColor: '#111113', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#1F1F23' },
-  chartCardTitle: { fontSize: 14, fontWeight: '600', color: '#FFFFFF', marginBottom: 16 },
-  chartBarsRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end' },
-  chartBarWrapper: { alignItems: 'center' },
-  chartBarCol: { justifyContent: 'flex-end' },
-  chartBar: { width: 24, borderRadius: 6, minHeight: 4 },
-  chartBarLabel: { fontSize: 9, color: '#9CA3AF', marginTop: 8, fontWeight: '600' },
-  chartBarValue: { fontSize: 8, color: '#FFFFFF', marginTop: 4 },
-  weekMonthCard: { backgroundColor: '#111113', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#1F1F23' },
-  controlCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  controlCardTitle: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
-  dateRangeText: { fontSize: 11, color: '#6B7280', marginTop: 2 },
-  monthProgress: { fontSize: 11, color: '#6B7280' },
-  controlStatsRow: { flexDirection: 'row', alignItems: 'center' },
-  controlStat: { flex: 1, alignItems: 'center' },
-  controlStatDivider: { width: 1, height: 30, backgroundColor: '#1F1F23' },
-  controlStatValue: { fontSize: 20, fontWeight: '700', color: '#FFFFFF' },
-  controlStatLabel: { fontSize: 10, color: '#6B7280', marginTop: 4, textAlign: 'center' },
-  projectionBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A1D', borderRadius: 8, padding: 12, marginTop: 12, gap: 8 },
-  projectionText: { fontSize: 12, color: '#9CA3AF', flex: 1 },
-  footerSpacer: { height: 60 },
+  container: {
+    flex: 1,
+    backgroundColor: '#F7FAFC',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  backButton: {
+    padding: 4,
+  },
+  headerCenter: {
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a365d',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    marginTop: 4,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 4,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  adminButton: {
+    padding: 4,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 16,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1a365d',
+    marginTop: 24,
+    marginBottom: 12,
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1a365d',
+  },
+  helpIcon: {
+    padding: 4,
+  },
+  operationGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  operationItem: {
+    width: '50%',
+    paddingVertical: 8,
+  },
+  operationLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 2,
+  },
+  operationValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1a365d',
+  },
+  noData: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  noDataText: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+  },
+  noDataSub: {
+    fontSize: 12,
+    color: '#bbb',
+    marginTop: 4,
+  },
+  alertItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 12,
+    backgroundColor: '#FFF5F5',
+    borderRadius: 8,
+  },
+  alertIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#C5303020',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  alertContent: {
+    flex: 1,
+  },
+  alertTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#C53030',
+    marginBottom: 2,
+  },
+  alertDesc: {
+    fontSize: 12,
+    color: '#666',
+  },
+  radarScroll: {
+    marginHorizontal: -8,
+  },
+  radarDay: {
+    width: 70,
+    alignItems: 'center',
+    paddingVertical: 8,
+    marginHorizontal: 4,
+    backgroundColor: '#F7FAFC',
+    borderRadius: 8,
+  },
+  radarDate: {
+    fontSize: 11,
+    color: '#666',
+    marginBottom: 4,
+  },
+  radarOcc: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1a365d',
+  },
+  radarRooms: {
+    fontSize: 11,
+    color: '#666',
+    marginTop: 2,
+  },
+  radarRev: {
+    fontSize: 11,
+    color: '#38A169',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  weekBars: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'flex-end',
+    height: 120,
+    paddingTop: 8,
+  },
+  weekBarItem: {
+    alignItems: 'center',
+    width: 50,
+  },
+  weekBarLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  weekBarBg: {
+    width: 30,
+    height: 80,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 4,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  weekBarFill: {
+    width: '100%',
+    backgroundColor: '#4299E1',
+    borderRadius: 4,
+  },
+  weekBarValue: {
+    fontSize: 11,
+    color: '#1a365d',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  statsCard: {
+    width: 100,
+    backgroundColor: '#F7FAFC',
+    borderRadius: 8,
+    padding: 12,
+    marginRight: 8,
+    alignItems: 'center',
+  },
+  statsWeek: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1a365d',
+    marginBottom: 8,
+  },
+  statsLabel: {
+    fontSize: 10,
+    color: '#999',
+    marginTop: 4,
+  },
+  statsValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1a365d',
+  },
+  footerSpacer: {
+    height: 40,
+  },
+  tooltipOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tooltipBox: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    marginHorizontal: 32,
+    maxWidth: 320,
+  },
+  tooltipText: {
+    fontSize: 14,
+    color: '#333',
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  tooltipClose: {
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  tooltipCloseText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4299E1',
+  },
 });
