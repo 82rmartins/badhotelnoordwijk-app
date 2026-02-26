@@ -558,13 +558,6 @@ export default function ManagerDashboard() {
               <Text style={styles.noDataSmall}>Loading...</Text>
             </View>
           )}
-          
-          {/* Pagination dots */}
-          <View style={styles.paginationContainer}>
-            {operationDays.map((_, idx) => (
-              <View key={idx} style={[styles.paginationDot, idx === operationIndex && styles.paginationDotActive]} />
-            ))}
-          </View>
         </View>
         
         {/* WHAT NEEDS ATTENTION */}
