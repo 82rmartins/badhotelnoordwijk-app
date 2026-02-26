@@ -46,24 +46,22 @@ export default function AdminScreen() {
 
   const loadCurrentData = async () => {
     try {
-      const [loadedSettings, update, mewsData] = await Promise.all([
+      const [loadedSettings, update, hotelData] = await Promise.all([
         loadSettings(),
         getLastUpdate(),
-        loadMewsData(),
+        loadHotelData(),
       ]);
       setSettings(loadedSettings);
       setLastUpdate(update);
-      // Count total periods from Mews data
-      const totalPeriods = mewsData.daily.length + mewsData.weekly.length + mewsData.monthly.length;
-      setReservationCount(totalPeriods);
       setDataDetails({
-        daily: mewsData.daily.length,
-        weekly: mewsData.weekly.length,
-        monthly: mewsData.monthly.length,
+        daily: hotelData.daily.length,
+        weekly: hotelData.weekly.length,
+        monthly: hotelData.monthly.length,
       });
-      console.log('Current Mews data:', { daily: mewsData.daily.length, weekly: mewsData.weekly.length, monthly: mewsData.monthly.length });
+      setReservationCount(hotelData.daily.length + hotelData.weekly.length + hotelData.monthly.length);
+      console.log('[Admin] Loaded data:', { daily: hotelData.daily.length, weekly: hotelData.weekly.length, monthly: hotelData.monthly.length });
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('[Admin] Error loading data:', error);
     }
   };
 
