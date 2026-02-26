@@ -1,57 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DailyData, WeeklyData, MonthlyData } from './xlsxParser';
 
 // API URL - use backend for cloud storage
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
 const STORAGE_KEYS = {
-  RESERVATIONS: '@badhotel_reservations',
   SETTINGS: '@badhotel_settings',
   LAST_UPDATE: '@badhotel_last_update',
-  DASHBOARD_CACHE: '@badhotel_dashboard_cache',
-  MEWS_DATA: '@badhotel_mews_data', // NEW: Store Mews report data directly
+  HOTEL_DATA: '@badhotel_hotel_data',
 };
 
-export interface Reservation {
-  reservation_id: string;
-  guest_name: string;
-  room_number: string;
-  check_in: string; // ISO date string
-  check_out: string; // ISO date string
-  room_revenue?: number;
-  parking_revenue?: number;
-  vending_revenue?: number;
-  city_tax?: number;
-  status: string;
-  adults?: number;
-  children?: number;
-  total_amount?: number;
-  payment_status?: string;
-}
-
-// NEW: Direct Mews data structure
-export interface MewsDailyData {
-  date: string; // ISO date
-  occupancy: number; // percentage
-  occupiedRooms: number;
-  availableRooms: number;
-  revenue: number; // Room revenue only
-  totalRevenue?: number; // Total (rooms + parking + tax)
-  parkingRevenue?: number;
-  touristTax?: number;
-  adr: number;
-  arrivals: number;
-  departures: number;
-  customers: number;
-}
-
-export interface MewsReportStore {
-  lastUpdate: string;
-  daily: MewsDailyData[];
-  weekly: MewsDailyData[];
-  monthly: MewsDailyData[];
-  arrivals: { date: string; count: number }[];
-  departures: { date: string; count: number }[];
-}
+// ============================================
+// TYPES
+// ============================================
 
 export interface HotelSettings {
   total_rooms: number;
@@ -60,34 +21,31 @@ export interface HotelSettings {
 }
 
 export const DEFAULT_SETTINGS: HotelSettings = {
-  total_rooms: 24, // 20 double + 2 triple + 2 single
+  total_rooms: 28,
   high_season_target: 85,
   low_season_target: 65,
 };
 
-// Save reservations to local storage
-export async function saveReservations(reservations: Reservation[]): Promise<void> {
-  try {
-    await AsyncStorage.setItem(STORAGE_KEYS.RESERVATIONS, JSON.stringify(reservations));
-    await AsyncStorage.setItem(STORAGE_KEYS.LAST_UPDATE, new Date().toISOString());
-  } catch (error) {
-    console.error('Error saving reservations:', error);
-    throw error;
-  }
+// Main data store - mirrors Excel structure
+export interface HotelDataStore {
+  lastUpdate: string;
+  daily: DailyData[];
+  weekly: WeeklyData[];
+  monthly: MonthlyData[];
+  temperature?: number; // Today's temperature from Excel
 }
 
-// Load reservations from local storage
-export async function loadReservations(): Promise<Reservation[]> {
-  try {
-    const data = await AsyncStorage.getItem(STORAGE_KEYS.RESERVATIONS);
-    return data ? JSON.parse(data) : [];
-  } catch (error) {
-    console.error('Error loading reservations:', error);
-    return [];
-  }
-}
+// Legacy type alias for backward compatibility
+export type MewsDailyData = DailyData;
+export type MewsReportStore = HotelDataStore & {
+  arrivals?: { date: string; count: number }[];
+  departures?: { date: string; count: number }[];
+};
 
-// Save settings
+// ============================================
+// SETTINGS
+// ============================================
+
 export async function saveSettings(settings: HotelSettings): Promise<void> {
   try {
     await AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
@@ -97,7 +55,6 @@ export async function saveSettings(settings: HotelSettings): Promise<void> {
   }
 }
 
-// Load settings
 export async function loadSettings(): Promise<HotelSettings> {
   try {
     const data = await AsyncStorage.getItem(STORAGE_KEYS.SETTINGS);
@@ -108,7 +65,10 @@ export async function loadSettings(): Promise<HotelSettings> {
   }
 }
 
-// Get last update timestamp
+// ============================================
+// LAST UPDATE
+// ============================================
+
 export async function getLastUpdate(): Promise<string | null> {
   try {
     return await AsyncStorage.getItem(STORAGE_KEYS.LAST_UPDATE);
@@ -118,198 +78,271 @@ export async function getLastUpdate(): Promise<string | null> {
   }
 }
 
-// Cache dashboard data for offline access
-export async function cacheDashboard(data: any): Promise<void> {
-  try {
-    await AsyncStorage.setItem(STORAGE_KEYS.DASHBOARD_CACHE, JSON.stringify(data));
-  } catch (error) {
-    console.error('Error caching dashboard:', error);
-  }
-}
+// ============================================
+// HOTEL DATA - CLOUD FIRST (MongoDB)
+// ============================================
 
-// Load cached dashboard
-export async function loadCachedDashboard(): Promise<any | null> {
-  try {
-    const data = await AsyncStorage.getItem(STORAGE_KEYS.DASHBOARD_CACHE);
-    return data ? JSON.parse(data) : null;
-  } catch (error) {
-    console.error('Error loading cached dashboard:', error);
-    return null;
-  }
-}
+// SAVE: Completely replace all data (as per contract)
+export async function saveHotelData(data: {
+  daily: DailyData[];
+  weekly: WeeklyData[];
+  monthly: MonthlyData[];
+  temperature?: number;
+}): Promise<void> {
+  const store: HotelDataStore = {
+    lastUpdate: new Date().toISOString(),
+    daily: data.daily,
+    weekly: data.weekly,
+    monthly: data.monthly,
+    temperature: data.temperature,
+  };
 
-// Clear all data (both cloud and local)
-export async function clearAllData(): Promise<void> {
   try {
-    // Clear from backend (cloud)
-    try {
-      await fetch(`${API_URL}/api/mews-data`, { method: 'DELETE' });
-      console.log('Cloud data cleared');
-    } catch (apiError) {
-      console.warn('Could not clear cloud data:', apiError);
-    }
-    
-    // Also clear local storage
-    await AsyncStorage.multiRemove(Object.values(STORAGE_KEYS));
-    console.log('All data cleared successfully');
-  } catch (error) {
-    console.error('Error clearing data:', error);
-    throw error;
-  }
-}
+    // Save to cloud (MongoDB via backend)
+    const response = await fetch(`${API_URL}/api/mews-data`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(store),
+    });
 
-// NEW: Save Mews report data to CLOUD (MongoDB via backend API)
-export async function saveMewsData(data: Partial<MewsReportStore>): Promise<void> {
-  try {
-    // Prepare data
-    const updated: MewsReportStore = {
-      lastUpdate: new Date().toISOString(),
-      daily: data.daily !== undefined ? data.daily : [],
-      weekly: data.weekly !== undefined ? data.weekly : [],
-      monthly: data.monthly !== undefined ? data.monthly : [],
-      arrivals: data.arrivals !== undefined ? data.arrivals : [],
-      departures: data.departures !== undefined ? data.departures : [],
-    };
-    
-    // Save to backend (cloud storage)
-    try {
-      const response = await fetch(`${API_URL}/api/mews-data`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated),
+    if (response.ok) {
+      console.log('[Storage] Data saved to cloud:', {
+        daily: data.daily.length,
+        weekly: data.weekly.length,
+        monthly: data.monthly.length,
       });
       
-      if (response.ok) {
-        console.log('Mews data saved to cloud:', { 
-          daily: updated.daily.length, 
-          weekly: updated.weekly.length, 
-          monthly: updated.monthly.length,
-          arrivals: updated.arrivals.length,
-          departures: updated.departures.length,
-        });
-        
-        // Also save locally as backup
-        await AsyncStorage.setItem(STORAGE_KEYS.MEWS_DATA, JSON.stringify(updated));
-        await AsyncStorage.setItem(STORAGE_KEYS.LAST_UPDATE, new Date().toISOString());
-        return;
-      } else {
-        console.warn('Cloud save failed, falling back to local:', await response.text());
-      }
-    } catch (apiError) {
-      console.warn('API not available, saving locally:', apiError);
+      // Also save locally as backup
+      await AsyncStorage.setItem(STORAGE_KEYS.HOTEL_DATA, JSON.stringify(store));
+      await AsyncStorage.setItem(STORAGE_KEYS.LAST_UPDATE, store.lastUpdate);
+      return;
     }
-    
-    // Fallback to local storage
-    await AsyncStorage.setItem(STORAGE_KEYS.MEWS_DATA, JSON.stringify(updated));
-    await AsyncStorage.setItem(STORAGE_KEYS.LAST_UPDATE, new Date().toISOString());
-    console.log('Mews data saved locally:', { 
-      daily: updated.daily.length, 
-      weekly: updated.weekly.length, 
-      monthly: updated.monthly.length,
-    });
+
+    console.warn('[Storage] Cloud save failed:', await response.text());
   } catch (error) {
-    console.error('Error saving Mews data:', error);
-    throw error;
+    console.warn('[Storage] Cloud unavailable, saving locally:', error);
   }
+
+  // Fallback to local
+  await AsyncStorage.setItem(STORAGE_KEYS.HOTEL_DATA, JSON.stringify(store));
+  await AsyncStorage.setItem(STORAGE_KEYS.LAST_UPDATE, store.lastUpdate);
 }
 
-// NEW: Load Mews report data from CLOUD (MongoDB via backend API) - CLOUD FIRST!
-export async function loadMewsData(): Promise<MewsReportStore> {
-  const emptyData: MewsReportStore = { 
-    lastUpdate: '', 
-    daily: [], 
-    weekly: [], 
-    monthly: [], 
-    arrivals: [], 
-    departures: [] 
+// LOAD: Always try cloud first for consistency across devices
+export async function loadHotelData(): Promise<HotelDataStore> {
+  const emptyData: HotelDataStore = {
+    lastUpdate: '',
+    daily: [],
+    weekly: [],
+    monthly: [],
   };
-  
+
   try {
-    // ALWAYS try cloud first - this ensures all devices see the same data
-    const response = await fetch(`${API_URL}/api/mews-data`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
+    // Try cloud first
+    const response = await fetch(`${API_URL}/api/mews-data`);
     
     if (response.ok) {
       const data = await response.json();
-      console.log('Mews data loaded from CLOUD:', { 
-        daily: data.daily?.length || 0, 
-        weekly: data.weekly?.length || 0, 
+      console.log('[Storage] Data loaded from cloud:', {
+        daily: data.daily?.length || 0,
+        weekly: data.weekly?.length || 0,
         monthly: data.monthly?.length || 0,
-        arrivals: data.arrivals?.length || 0,
-        departures: data.departures?.length || 0,
       });
-      
-      // Also update local storage as cache
-      const result = {
+
+      const result: HotelDataStore = {
         lastUpdate: data.lastUpdate || '',
         daily: data.daily || [],
         weekly: data.weekly || [],
         monthly: data.monthly || [],
-        arrivals: data.arrivals || [],
-        departures: data.departures || [],
+        temperature: data.temperature,
       };
-      
-      // Save to local as backup
+
+      // Cache locally
       try {
-        await AsyncStorage.setItem(STORAGE_KEYS.MEWS_DATA, JSON.stringify(result));
+        await AsyncStorage.setItem(STORAGE_KEYS.HOTEL_DATA, JSON.stringify(result));
       } catch (e) {
-        // Ignore local storage errors
+        // Ignore local cache errors
       }
-      
+
       return result;
-    } else {
-      console.warn('Cloud API returned error:', response.status);
     }
-  } catch (apiError) {
-    console.warn('Cloud API not available:', apiError);
+  } catch (error) {
+    console.warn('[Storage] Cloud unavailable:', error);
   }
-  
-  // Only fallback to local if cloud fails
+
+  // Fallback to local
   try {
-    const data = await AsyncStorage.getItem(STORAGE_KEYS.MEWS_DATA);
-    if (data) {
-      const parsed = JSON.parse(data);
-      console.log('Mews data loaded from LOCAL (fallback):', { 
-        daily: parsed.daily?.length || 0, 
-        weekly: parsed.weekly?.length || 0, 
-        monthly: parsed.monthly?.length || 0 
+    const localData = await AsyncStorage.getItem(STORAGE_KEYS.HOTEL_DATA);
+    if (localData) {
+      const parsed = JSON.parse(localData);
+      console.log('[Storage] Data loaded from local (fallback):', {
+        daily: parsed.daily?.length || 0,
+        weekly: parsed.weekly?.length || 0,
+        monthly: parsed.monthly?.length || 0,
       });
       return {
         lastUpdate: parsed.lastUpdate || '',
         daily: parsed.daily || [],
         weekly: parsed.weekly || [],
         monthly: parsed.monthly || [],
-        arrivals: parsed.arrivals || [],
-        departures: parsed.departures || [],
+        temperature: parsed.temperature,
       };
     }
-  } catch (localError) {
-    console.error('Local storage error:', localError);
+  } catch (error) {
+    console.error('[Storage] Local load error:', error);
   }
-  
+
   return emptyData;
 }
 
-// NEW: Get today's data from Mews store
-export async function getTodayData(): Promise<MewsDailyData | null> {
+// CLEAR: Remove all data (cloud + local)
+export async function clearAllData(): Promise<void> {
   try {
-    const mewsData = await loadMewsData();
-    const today = new Date().toISOString().split('T')[0];
-    
-    // Look in daily data first
-    if (mewsData.daily.length > 0) {
-      const todayData = mewsData.daily.find(d => d.date === today);
-      if (todayData) return todayData;
-      
-      // If no exact match, return most recent
-      return mewsData.daily[mewsData.daily.length - 1];
+    // Clear cloud
+    try {
+      await fetch(`${API_URL}/api/mews-data`, { method: 'DELETE' });
+      console.log('[Storage] Cloud data cleared');
+    } catch (error) {
+      console.warn('[Storage] Could not clear cloud:', error);
     }
-    
-    return null;
+
+    // Clear local
+    await AsyncStorage.multiRemove([
+      STORAGE_KEYS.HOTEL_DATA,
+      STORAGE_KEYS.LAST_UPDATE,
+    ]);
+    console.log('[Storage] All data cleared');
   } catch (error) {
-    console.error('Error getting today data:', error);
-    return null;
+    console.error('[Storage] Clear error:', error);
+    throw error;
   }
+}
+
+// ============================================
+// LEGACY COMPATIBILITY FUNCTIONS
+// ============================================
+
+// Legacy save function - redirects to new saveHotelData
+export async function saveMewsData(data: Partial<MewsReportStore>): Promise<void> {
+  return saveHotelData({
+    daily: data.daily || [],
+    weekly: data.weekly?.map(w => ({
+      isoWeek: '',
+      weekStart: w.date || '',
+      weekEnd: '',
+      available: w.availableRooms || 0,
+      occupied: w.occupiedRooms || 0,
+      occupancy: w.occupancy || 0,
+      revenueNights: w.revenue || 0,
+      adr: w.adr || 0,
+      customers: w.customers || 0,
+      touristTax: w.touristTax || 0,
+      parking: w.parkingRevenue || 0,
+      totalRevenue: w.totalRevenue || 0,
+    })) || [],
+    monthly: data.monthly?.map(m => ({
+      month: '',
+      monthStart: m.date || '',
+      monthEnd: '',
+      available: m.availableRooms || 0,
+      occupied: m.occupiedRooms || 0,
+      occupancy: m.occupancy || 0,
+      revenueNights: m.revenue || 0,
+      adr: m.adr || 0,
+      customers: m.customers || 0,
+      touristTax: m.touristTax || 0,
+      parking: m.parkingRevenue || 0,
+      totalRevenue: m.totalRevenue || 0,
+    })) || [],
+  });
+}
+
+// Legacy load function - returns data in old format with arrivals/departures extracted
+export async function loadMewsData(): Promise<MewsReportStore> {
+  const data = await loadHotelData();
+  
+  // Extract arrivals and departures from daily data
+  const arrivals: { date: string; count: number }[] = [];
+  const departures: { date: string; count: number }[] = [];
+  
+  for (const day of data.daily) {
+    if (day.arrivals > 0) {
+      arrivals.push({ date: day.date, count: day.arrivals });
+    }
+    if (day.departures > 0) {
+      departures.push({ date: day.date, count: day.departures });
+    }
+  }
+
+  return {
+    lastUpdate: data.lastUpdate,
+    daily: data.daily,
+    weekly: data.weekly.map(w => ({
+      date: w.weekStart,
+      occupancy: w.occupancy,
+      occupiedRooms: w.occupied,
+      availableRooms: w.available,
+      revenue: w.revenueNights,
+      totalRevenue: w.totalRevenue,
+      parkingRevenue: w.parking,
+      touristTax: w.touristTax,
+      adr: w.adr,
+      arrivals: 0,
+      departures: 0,
+      customers: w.customers,
+    })),
+    monthly: data.monthly.map(m => ({
+      date: m.monthStart,
+      occupancy: m.occupancy,
+      occupiedRooms: m.occupied,
+      availableRooms: m.available,
+      revenue: m.revenueNights,
+      totalRevenue: m.totalRevenue,
+      parkingRevenue: m.parking,
+      touristTax: m.touristTax,
+      adr: m.adr,
+      arrivals: 0,
+      departures: 0,
+      customers: m.customers,
+    })),
+    arrivals,
+    departures,
+    temperature: data.temperature,
+  };
+}
+
+// ============================================
+// DEPRECATED - Remove in future
+// ============================================
+
+export interface Reservation {
+  reservation_id: string;
+  guest_name: string;
+  room_number: string;
+  check_in: string;
+  check_out: string;
+  status: string;
+}
+
+export async function saveReservations(reservations: Reservation[]): Promise<void> {
+  console.warn('[Storage] saveReservations is deprecated');
+}
+
+export async function loadReservations(): Promise<Reservation[]> {
+  console.warn('[Storage] loadReservations is deprecated');
+  return [];
+}
+
+export async function cacheDashboard(data: any): Promise<void> {
+  // No-op
+}
+
+export async function loadCachedDashboard(): Promise<any | null> {
+  return null;
+}
+
+export async function getTodayData(): Promise<DailyData | null> {
+  const data = await loadHotelData();
+  const today = new Date().toISOString().split('T')[0];
+  return data.daily.find(d => d.date === today) || null;
 }
