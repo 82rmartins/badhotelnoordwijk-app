@@ -295,27 +295,6 @@ export default function AdminScreen() {
     }
   }, [language, t, settings.total_rooms, handleWebMultiFileUpload, processAndSaveXLSXFiles]);
 
-  const seedDemoData = useCallback(async () => {
-    try {
-      setSeedingData(true);
-      setLastResult(null);
-
-      const demoReservations = generateDemoReservations(settings);
-      await saveReservations(demoReservations);
-      await loadCurrentData();
-
-      const message = `✓ ${demoReservations.length} ${language === 'en' ? 'demo reservations created' : 'demo reserveringen aangemaakt'}`;
-      setLastResult(message);
-      Alert.alert(t.success, message);
-    } catch (error: any) {
-      console.error('Seed error:', error);
-      setLastResult(`✗ ${t.error}: ${error.message}`);
-      Alert.alert(t.error, error.message);
-    } finally {
-      setSeedingData(false);
-    }
-  }, [settings, language, t]);
-
   const handleClearData = useCallback(async () => {
     Alert.alert(
       t.clearConfirmTitle,
