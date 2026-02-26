@@ -540,6 +540,7 @@ export default function ManagerDashboard() {
               );
             })}
           </ScrollView>
+          </>
           ) : (
             <View style={styles.noDataSmallBox}>
               <ActivityIndicator size="small" color="#10B981" />
