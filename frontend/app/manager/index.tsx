@@ -467,29 +467,41 @@ export default function ManagerDashboard() {
           </View>
           
           {operationDays.length > 0 ? (
-          <>
-          <ScrollView
-            ref={operationScrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={handleOperationScroll}
-            onLayout={() => {
-              // Scroll to today on layout
-              operationScrollRef.current?.scrollTo({ x: 2 * OPERATION_CARD_WIDTH, animated: false });
-            }}
-            snapToInterval={OPERATION_CARD_WIDTH}
-            decelerationRate="fast"
-          >
-            {operationDays.map((dayData, idx) => {
-              const offsetFromToday = idx - 2; // Index 2 = today
+          <View>
+            {/* Navigation buttons */}
+            <View style={styles.operationNav}>
+              <TouchableOpacity 
+                onPress={() => setOperationIndex(Math.max(0, operationIndex - 1))}
+                disabled={operationIndex === 0}
+                style={[styles.operationNavBtn, operationIndex === 0 && styles.operationNavBtnDisabled]}
+              >
+                <Ionicons name="chevron-back" size={24} color={operationIndex === 0 ? '#374151' : '#FFFFFF'} />
+              </TouchableOpacity>
+              
+              <Text style={styles.operationNavLabel}>
+                {operationIndex - 2 === 0 ? 'Today' : operationIndex - 2 < 0 ? `${Math.abs(operationIndex - 2)}d ago` : `+${operationIndex - 2}d`}
+              </Text>
+              
+              <TouchableOpacity 
+                onPress={() => setOperationIndex(Math.min(operationDays.length - 1, operationIndex + 1))}
+                disabled={operationIndex === operationDays.length - 1}
+                style={[styles.operationNavBtn, operationIndex === operationDays.length - 1 && styles.operationNavBtnDisabled]}
+              >
+                <Ionicons name="chevron-forward" size={24} color={operationIndex === operationDays.length - 1 ? '#374151' : '#FFFFFF'} />
+              </TouchableOpacity>
+            </View>
+            
+            {/* Current day card */}
+            {(() => {
+              const dayData = operationDays[operationIndex];
+              const offsetFromToday = operationIndex - 2;
               const dateLabel = getDateLabel(offsetFromToday);
               const isToday = offsetFromToday === 0;
               const dayTarget = getSeasonTarget(new Date(new Date().setDate(new Date().getDate() + offsetFromToday)).getMonth());
               const dayIsRisk = dayData ? dayData.occupancy < dayTarget : false;
               
               return (
-                <View key={idx} style={[styles.operationCard, { width: OPERATION_CARD_WIDTH }]}>
+                <View style={styles.operationCard}>
                   <View style={styles.operationDateRow}>
                     <Text style={[styles.operationDate, isToday && styles.operationDateToday]}>{dateLabel}</Text>
                     {isToday && <Text style={styles.operationTodayBadge}>TODAY</Text>}
@@ -538,9 +550,8 @@ export default function ManagerDashboard() {
                   )}
                 </View>
               );
-            })}
-          </ScrollView>
-          </>
+            })()}
+          </View>
           ) : (
             <View style={styles.noDataSmallBox}>
               <ActivityIndicator size="small" color="#10B981" />
