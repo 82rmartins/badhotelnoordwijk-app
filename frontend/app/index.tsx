@@ -97,7 +97,10 @@ const ModeCard = ({
 
 export default function ModeSelector() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { language } = useLanguage();
+
+  const staffMode = params?.staff === '1';
 
   const translations: Record<string, any> = {
     en: {
